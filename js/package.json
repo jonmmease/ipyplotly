@@ -1,7 +1,7 @@
 {
   "name": "ipyplotly",
   "version": "0.1.0",
-  "description": "pythonic plotly API for use in Jupyteer",
+  "description": "pythonic plotly API for use in Jupyter",
   "author": "Jon Mease",
   "main": "src/index.js",
   "repository": {
@@ -23,7 +23,8 @@
     "webpack": "^1.12.14"
   },
   "dependencies": {
-    "@jupyter-widgets/base": "^0.6.4",
+    "plotly.js": "^1.29.3",
+    "@jupyter-widgets/base": "^1.0.1",
     "underscore": "^1.8.3"
   }
 }

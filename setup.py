@@ -22,7 +22,7 @@ log.set_verbosity(log.DEBUG)
 log.info('setup.py entered')
 log.info('$PATH=%s' % os.environ['PATH'])
 
-LONG_DESCRIPTION = 'pythonic plotly API for use in Jupyteer'
+LONG_DESCRIPTION = 'pythonic plotly API for use in Jupyter'
 
 def js_prerelease(command, strict=False):
     """decorator for building minified js/css prior to another command"""
@@ -138,7 +138,7 @@ setup_args = {
         ]),
     ],
     'install_requires': [
-        'ipywidgets>=7.0.0b1',
+        'ipywidgets>=7.0.0b12',
     ],
     'packages': find_packages(),
     'zip_safe': False,
