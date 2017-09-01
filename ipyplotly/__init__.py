@@ -15,15 +15,14 @@ def _jupyter_nbextension_paths():
 __frontend_version__ = '^0.1'
 
 
+@widgets.register
 class Scatter(widgets.Widget):
     """The scatter trace type encompasses line charts, scatter charts, text charts, and bubble charts.
     The data visualized as scatter point or lines is set in `x` and `y`. Text (appearing either on the chart or on
     hover only) is via `text`. Bubble charts are achieved by setting `marker.size` and/or `marker.color` to numerical
     arrays."""
-
-    _view_module = Unicode('ipyplotly').tag(sync=True)
-    _view_name = Unicode('ScatterView').tag(sync=True)
-    _view_module_version = Unicode(__frontend_version__).tag(sync=True)
+    _model_name = Unicode('ScatterModel').tag(sync=True)
+    _model_module = Unicode('ipyplotly').tag(sync=True)
 
     type = Unicode("scatter", read_only=True).tag(sync=True)
 
@@ -69,6 +68,7 @@ class Scatter(widgets.Widget):
         self.fig = fig
 
 
+@widgets.register
 class Figure(widgets.DOMWidget):
     _view_module = Unicode('ipyplotly').tag(sync=True)
     _view_name = Unicode('FigureView').tag(sync=True)
@@ -76,9 +76,6 @@ class Figure(widgets.DOMWidget):
 
     _model_name = Unicode('FigureModel').tag(sync=True)
     _model_module = Unicode('ipyplotly').tag(sync=True)
-
-    # plotly_data_str = Unicode().tag(sync=True)
-    # plotly_layout_str = Unicode().tag(sync=True)
 
     traces = List(Instance(Scatter)).tag(sync=True, **widget_serialization)
 
