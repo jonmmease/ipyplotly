@@ -16,6 +16,7 @@ var FigureView = widgets.DOMWidgetView.extend({
 
         that = this;
         Promise.all(this.trace_views.views).then(function(views) {
+            console.log(views)
             // TODO: logic to update all views (order, etc.)
             // Plotly.addTraces(that.el, {y: [2,1,2]});
             // Plotly.deleteTraces(that.el, 0);
@@ -30,7 +31,7 @@ var FigureView = widgets.DOMWidgetView.extend({
     add_trace: function (model) {
         // add trace to plot
         console.log('add trace');
-        console.log(model);
+        console.log(model.get('figure'));
 
         Plotly.addTraces(this.el, {
             x: model.get('x'),
@@ -63,20 +64,45 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
 // Widget Models don't need views but I need some way for them to report
 // changes up to the figure
+// Widget Models don't need views but I need some way for them to report
+// changes up to the figure
+var BaseTraceModel = widgets.WidgetModel.extend({
+    defaults: _.extend(widgets.WidgetModel.prototype.defaults(), {
+        _model_name: 'BaseTraceModel',
+        _model_module: 'ipyplotly',
+    })
+});
+
 var ScatterModel = widgets.WidgetModel.extend({
     defaults: _.extend(widgets.WidgetModel.prototype.defaults(), {
         _model_name: 'ScatterModel',
         _model_module: 'ipyplotly',
 
+        figure: null,
         opacity: 1.0,
         x: [],
         y: [],
         type: 'scatter'
     })
+}, {
+    serializers: _.extend({
+        figure: { deserialize: widgets.unpack_models },
+    }, widgets.WidgetModel.serializers)
+});
+
+var ScatterView = widgets.WidgetView.extend({
+    render: function() {
+        // Wire up callbacks
+        this.model.on('change:opacity', this.change_opacity, this);
+    },
+    change_opacity: function () {
+        console.log('opacity changed')
+    }
 });
 
 module.exports = {
     FigureView : FigureView,
     FigureModel: FigureModel,
+    BaseTraceModel: BaseTraceModel,
     ScatterModel: ScatterModel
 };
