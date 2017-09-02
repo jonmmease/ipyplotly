@@ -83,6 +83,7 @@ class Figure(widgets.DOMWidget):
 
     def restyle(self, style, trace_index=None):
         restype_msg = (style, trace_index)
+        print('Restyle: {msg}'.format(msg=restype_msg))
         self._plotly_restyle = restype_msg
         self._plotly_restyle = None
 

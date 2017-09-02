@@ -287,6 +287,8 @@ class String:
 
         return v
 
+
+class Color:
     """
         "color": {
             "description": "A string describing color. Supported formats: - hex (e.g. '#d3d3d3') - rgb (e.g. 'rgb(255, 0, 0)') - rgba (e.g. 'rgb(255, 0, 0, 0.5)') - hsl (e.g. 'hsl(0, 100%, 50%)') - hsv (e.g. 'hsv(0, 100%, 100%)') - named colors (full list: http://www.w3.org/TR/css3-color/#svg-color)",
@@ -297,6 +299,24 @@ class String:
             ]
         },
     """
+    def __init__(self, name, parent_name, default=None):
+        self.name = name
+        self.parent_name = parent_name
+        self.default = default
+
+    def validate_coerce(self, v):
+        if v is None:
+            v = self.default
+
+        elif not isinstance(v, str):
+            raise ValueError(("The {name} property of {parent_name} must be a string. "
+                              "Received value of type {typ}").format(name=self.name,
+                                                                     parent_name=self.parent_name,
+                                                                     typ=type(v)))
+
+        # TODO: validate color types
+        return v
+
 
     """
         "colorscale": {
