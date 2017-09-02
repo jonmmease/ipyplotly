@@ -3,49 +3,6 @@ var _ = require('underscore');
 var Plotly = require('plotly.js');
 
 
-// Figure View
-// ===========
-var FigureView = widgets.DOMWidgetView.extend({
-    render: function() {
-
-        // Initialize empty figure
-        Plotly.plot(this.el, [], {});
-
-        this.trace_views = new widgets.ViewList(this.add_trace, this.remove_trace, this);
-        this.trace_views.update(this.model.get("traces"));
-
-        that = this;
-        Promise.all(this.trace_views.views).then(function(views) {
-            console.log(views)
-            // TODO: logic to update all views (order, etc.)
-            // Plotly.addTraces(that.el, {y: [2,1,2]});
-            // Plotly.deleteTraces(that.el, 0);
-            // Plotly.moveTraces(that.el);
-        });
-
-        this.model.on('change:traces', this.change_traces, this);
-    },
-    change_traces: function () {
-        this.trace_views.update(this.model.get('traces'));
-    },
-    add_trace: function (model) {
-        // add trace to plot
-        console.log('add trace');
-        console.log(model.get('figure'));
-
-        Plotly.addTraces(this.el, {
-            x: model.get('x'),
-            y: model.get('y'),
-            type: model.get('type'),
-            opacity: model.get('opacity')
-        });
-    },
-    remove_trace: function (model) {
-        // remove trace from plot
-        Plotly.deleteTraces(this.el, 0)
-    }
-});
-
 // Models
 // ======
 var FigureModel = widgets.DOMWidgetModel.extend({
@@ -54,55 +11,61 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         _view_name: 'FigureView',
         _model_module: 'ipyplotly',
         _view_module: 'ipyplotly',
-        traces: []
-    })
-}, {
-    serializers: _.extend({
-        traces: { deserialize: widgets.unpack_models },
-    }, widgets.DOMWidgetModel.serializers)
-});
 
-// Widget Models don't need views but I need some way for them to report
-// changes up to the figure
-// Widget Models don't need views but I need some way for them to report
-// changes up to the figure
-var BaseTraceModel = widgets.WidgetModel.extend({
-    defaults: _.extend(widgets.WidgetModel.prototype.defaults(), {
-        _model_name: 'BaseTraceModel',
-        _model_module: 'ipyplotly',
+        _traces: [],
+        _layout: {},
+
+        // Message properties
+        _plotly_addTraces: null,
+        _plotly_restyle: null
     })
 });
 
-var ScatterModel = widgets.WidgetModel.extend({
-    defaults: _.extend(widgets.WidgetModel.prototype.defaults(), {
-        _model_name: 'ScatterModel',
-        _model_module: 'ipyplotly',
 
-        figure: null,
-        opacity: 1.0,
-        x: [],
-        y: [],
-        type: 'scatter'
-    })
-}, {
-    serializers: _.extend({
-        figure: { deserialize: widgets.unpack_models },
-    }, widgets.WidgetModel.serializers)
-});
+// Figure View
+// ===========
+var FigureView = widgets.DOMWidgetView.extend({
 
-var ScatterView = widgets.WidgetView.extend({
     render: function() {
-        // Wire up callbacks
-        this.model.on('change:opacity', this.change_opacity, this);
+
+        // Initialize empty figure
+        Plotly.plot(this.el, this.model.get('_traces'), this.model.get('_layout'));
+
+        this.model.on('change:_plotly_addTraces', this.do_addTraces, this);
+        this.model.on('change:_plotly_restyle', this.do_restyle, this);
     },
-    change_opacity: function () {
-        console.log('opacity changed')
-    }
+
+    do_addTraces: function () {
+        // add trace to plot
+
+        var data = this.model.get('_plotly_addTraces');
+        if (data !== null) {
+            Plotly.addTraces(this.el, data);
+
+            // this.model.set('_plotly_addTraces', null);
+            // this.model.save_changes();
+        }
+    },
+
+    do_restyle: function () {
+        var data = this.model.get('_plotly_restyle');
+        if (data !== null) {
+            var style = data[0];
+            var idx = data[1];
+            if (idx !== null) {
+                Plotly.restyle(this.el, style, idx)
+            } else {
+                Plotly.restyle(this.el, style)
+            }
+
+            // this.model.set('_plotly_restyle', null);
+            // this.model.save_changes();
+        }
+    },
 });
+
 
 module.exports = {
     FigureView : FigureView,
     FigureModel: FigureModel,
-    BaseTraceModel: BaseTraceModel,
-    ScatterModel: ScatterModel
 };
