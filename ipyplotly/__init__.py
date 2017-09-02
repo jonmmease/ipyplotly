@@ -72,7 +72,6 @@ class Figure(widgets.DOMWidget):
 
         # Send to front end
         add_traces_msg = [scatt._data]
-        print(add_traces_msg)
         self._plotly_addTraces = add_traces_msg
         self._plotly_addTraces = None
 
@@ -84,7 +83,6 @@ class Figure(widgets.DOMWidget):
 
     def restyle(self, style, trace_index=None):
         restype_msg = (style, trace_index)
-        print(restype_msg)
         self._plotly_restyle = restype_msg
         self._plotly_restyle = None
 
