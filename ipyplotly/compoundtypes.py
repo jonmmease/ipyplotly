@@ -1,4 +1,4 @@
-from ipyplotly.valuetypes import Number, String, DataArray, Color
+from ipyplotly.validators import Number, String, DataArray, Color
 import typing as typ
 
 

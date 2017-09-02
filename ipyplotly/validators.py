@@ -1,6 +1,21 @@
 import numbers
 
 
+# Notes: These become base validator classes, one for each value type. The code-gen validators for primitive types
+# subclass these (hand written) base validator types. compound validators are composed of other compound validators
+# and primitive validators
+#
+# The code gen process will input a property json specification and produce source code for:
+#  - a validator class.
+#  - A data class for compound types. These hold references to validators for all of their properties
+#
+# I write a TraceObjBase class that implements the idea of receiving and passing restyle events up the chain
+# I write a FigureBase that has current figure logic
+#
+# I code gen the figure subclass that has all of the add_scatter, add_bar, etc. methods.
+#
+# I think that's all of the code gen tasks. Validators, Data Classes, and Figure methods
+
 class _NoDefault(object):
     def __repr__(self):
         return '(no default)'
