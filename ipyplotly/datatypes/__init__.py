@@ -1,7 +1,33 @@
-from ipyplotly.basedatatypes import BaseDataType
+from ipyplotly.basedatatypes import BaseDataType, BaseFigureWidget
 import typing as typ
 
 from ipyplotly.validators.scatter import *
+
+
+# To autogenerate add_trace methods with all properties listed
+class Figure(BaseFigureWidget):
+
+    def add_scatter(self,
+                    x,
+                    y,
+                    opacity=1.0,
+                    name=None):
+        """
+
+        Parameters
+        ----------
+        x
+            The x coordinates
+        y
+            The y coordinates
+        opacity
+            The trace opacity
+        name
+            The trace name
+        """
+        trace = Scatter(x=x, y=y, opacity=opacity, name=name, parent=self)
+        return self._add_trace(trace)
+
 
 class Scatter(BaseDataType):
 
@@ -89,7 +115,7 @@ class Scatter(BaseDataType):
                  x,
                  y,
                  opacity=1.0,
-                 type_name=None,
+                 name=None,
                  line=None,
                  parent=None):
         """
@@ -102,7 +128,7 @@ class Scatter(BaseDataType):
             The y coordinates
         opacity
             The trace opacity
-        type_name
+        name
             The trace name
         """
 
@@ -129,7 +155,7 @@ class Scatter(BaseDataType):
         self.x = x
         self.y = y
         self.opacity = opacity
-        self.name = type_name
+        self.name = name
         self.line = line
 
         # Set parent
