@@ -23,7 +23,16 @@ NoDefault = _NoDefault()
 del _NoDefault
 
 
-class DataArray:
+class BaseValidator:
+    def __init__(self, name, parent_name):
+        self.parent_name = parent_name
+        self.name = name
+
+    def validate_coerce(self, v):
+        raise NotImplemented()
+
+
+class DataArrayValidator(BaseValidator):
     """
         "data_array": {
             "description": "An {array} of data. The value MUST be an {array}, or we ignore it.",
@@ -34,8 +43,7 @@ class DataArray:
         },
     """
     def __init__(self, name, parent_name, default=NoDefault):
-        self.name = name
-        self.parent_name = parent_name
+        super().__init__(name=name, parent_name=parent_name)
         self.default = default
 
     def validate_coerce(self, v):
@@ -47,7 +55,7 @@ class DataArray:
             else:
                 v = self.default
         else:
-            if not DataArray.is_array(v):
+            if not DataArrayValidator.is_array(v):
                 raise ValueError(("The {name} property of {parent_name} must be a list. "
                                  "Received value of type {typ}").format(name=self.name,
                                                                         parent_name=self.parent_name,
@@ -59,7 +67,7 @@ class DataArray:
         return isinstance(v, (list, type))
 
 
-class Enumerated:
+class EnumeratedValidator(BaseValidator):
     """
         "enumerated": {
             "description": "Enumerated value type. The available values are listed in `values`.",
@@ -74,8 +82,7 @@ class Enumerated:
         },
     """
     def __init__(self, name, parent_name, default, values, array_ok=False):
-        self.name = name
-        self.parent_name = parent_name
+        super().__init__(name=name, parent_name=parent_name)
         self.default = default
         self.values = values
         self.array_ok = array_ok
@@ -84,7 +91,7 @@ class Enumerated:
         if v is None:
             v = self.default
 
-        elif DataArray.is_array(v):
+        elif DataArrayValidator.is_array(v):
             if not self.array_ok:
                 raise ValueError(('The {name} property of {parent_name} must be a scalar value. '
                                   'Received value of type "{typ}"'.format(name=self.name,
@@ -113,7 +120,7 @@ class Enumerated:
         return v
 
 
-class Boolean:
+class BooleanValidator(BaseValidator):
     """
         "boolean": {
             "description": "A boolean (true/false) value.",
@@ -124,8 +131,7 @@ class Boolean:
         },
     """
     def __init__(self, name, parent_name, default):
-        self.name = name
-        self.parent_name = parent_name
+        super().__init__(name=name, parent_name=parent_name)
         self.default = default
 
     def validate_coerce(self, v):
@@ -140,7 +146,7 @@ class Boolean:
         return v
 
 
-class Number:
+class NumberValidator(BaseValidator):
     """
         "number": {
             "description": "A number or a numeric value (e.g. a number inside a string). When applicable, values greater (less) than `max` (`min`) are coerced to the `dflt`.",
@@ -154,8 +160,7 @@ class Number:
         },
     """
     def __init__(self, name, parent_name, default, min_val=None, max_val=None, array_ok=False):
-        self.name = name
-        self.parent_name = parent_name
+        super().__init__(name=name, parent_name=parent_name)
         self.default = default
         self.min = min_val
         self.max = max_val
@@ -169,7 +174,7 @@ class Number:
             else:
                 v = self.default
 
-        elif DataArray.is_array(v):
+        elif DataArrayValidator.is_array(v):
             if not self.array_ok:
                 raise ValueError(('The {name} property of {parent_name} must be a scalar value. '
                                   'Received value of type "{typ}"'.format(name=self.name,
@@ -191,7 +196,7 @@ class Number:
         return v
 
 
-class Integer:
+class IntegerValidator(BaseValidator):
     """
         "integer": {
             "description": "An integer or an integer inside a string. When applicable, values greater (less) than `max` (`min`) are coerced to the `dflt`.",
@@ -205,8 +210,7 @@ class Integer:
         },
     """
     def __init__(self, name, parent_name, default, min_val=None, max_val=None, array_ok=False):
-        self.name = name
-        self.parent_name = parent_name
+        super().__init__(name=name, parent_name=parent_name)
         self.default = default
         self.min = min_val
         self.max = max_val
@@ -216,7 +220,7 @@ class Integer:
         if v is None:
             v = self.default
 
-        elif DataArray.is_array(v):
+        elif DataArrayValidator.is_array(v):
             if not self.array_ok:
                 raise ValueError(('The {name} property of {parent_name} must be a scalar value. '
                                   'Received value of type "{typ}"'.format(name=self.name,
@@ -239,7 +243,7 @@ class Integer:
         return v
 
 
-class String:
+class StringValidator(BaseValidator):
     """
         "string": {
             "description": "A string value. Numbers are converted to strings except for attributes with `strict` set to true.",
@@ -254,8 +258,7 @@ class String:
         },
     """
     def __init__(self, name, parent_name, default=NoDefault, no_blank=False, strict=False, array_ok=False, values=None):
-        self.name = name
-        self.parent_name = parent_name
+        super().__init__(name=name, parent_name=parent_name)
         self.default = default
         self.no_blank = no_blank
         self.strict = strict
@@ -270,7 +273,7 @@ class String:
             else:
                 v = self.default
 
-        elif DataArray.is_array(v):
+        elif DataArrayValidator.is_array(v):
             if not self.array_ok:
                 raise ValueError(('The {name} property of {parent_name} must be a scalar value. '
                                   'Received value of type "{typ}"'.format(name=self.name,
@@ -303,7 +306,7 @@ class String:
         return v
 
 
-class Color:
+class ColorValidator(BaseValidator):
     """
         "color": {
             "description": "A string describing color. Supported formats: - hex (e.g. '#d3d3d3') - rgb (e.g. 'rgb(255, 0, 0)') - rgba (e.g. 'rgb(255, 0, 0, 0.5)') - hsl (e.g. 'hsl(0, 100%, 50%)') - hsv (e.g. 'hsv(0, 100%, 100%)') - named colors (full list: http://www.w3.org/TR/css3-color/#svg-color)",
@@ -315,8 +318,7 @@ class Color:
         },
     """
     def __init__(self, name, parent_name, default=None):
-        self.name = name
-        self.parent_name = parent_name
+        super().__init__(name=name, parent_name=parent_name)
         self.default = default
 
     def validate_coerce(self, v):
@@ -401,3 +403,28 @@ class Color:
             ]
         }
     """
+
+
+class CompoundValidator(BaseValidator):
+    def __init__(self, name, parent_name, data_class):
+        super().__init__(name=name, parent_name=parent_name)
+        self.data_class = data_class
+
+    def validate_coerce(self, v):
+        if v is None:
+            v = self.data_class()
+
+        elif isinstance(v, dict):
+            v = self.data_class(**v)
+        elif isinstance(v, self.data_class):
+            # Leave unchanged
+            pass
+        elif not isinstance(v, str):
+            raise ValueError(("The {name} property of {parent_name} must be a dict or instance of {cls_name}.\n"
+                              "Received value of type {typ}").format(name=self.name,
+                                                                     parent_name=self.parent_name,
+                                                                     cls_name=self.data_class.__name__,
+                                                                     typ=type(v)))
+
+        # TODO: validate color types
+        return v
