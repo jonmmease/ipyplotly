@@ -1,4 +1,4 @@
-from ipyplotly.datatypes import Scatter
+from ipyplotly.datatypes.trace import Scatter
 from ._version import version_info, __version__
 
 

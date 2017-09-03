@@ -56,7 +56,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         return trace
 
 
-class BaseDataType:
+class BaseTraceType:
 
     def __init__(self, type_name):
         self.type_name = type_name
@@ -88,3 +88,8 @@ class BaseDataType:
 
     def _restyle_child(self, child, prop, val):
         self._send_restyle('{child_name}.{prop}'.format(child_name=child.type_name, prop=prop), val)
+
+
+class BaseLayoutType:
+    # _send_relayout analogous to _send_restyle above
+    pass

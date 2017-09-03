@@ -1,8 +1,8 @@
-from ipyplotly.datatypes import BaseDataType
+from ipyplotly.basedatatypes import BaseTraceType
 from ipyplotly.validators.scatter.line import *
 
 
-class Line(BaseDataType):
+class Line(BaseTraceType):
 
     # color
     # -----
