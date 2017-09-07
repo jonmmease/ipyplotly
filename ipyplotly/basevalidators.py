@@ -42,9 +42,9 @@ class DataArrayValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, default=NoDefault):
+    def __init__(self, name, parent_name, dflt=NoDefault, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = default
+        self.default = dflt
 
     def validate_coerce(self, v):
 
@@ -81,11 +81,12 @@ class EnumeratedValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, default, values, array_ok=False):
+    def __init__(self, name, parent_name, dflt, values, arrayOk=False, coerceNumber=False, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = default
+        self.coerce_number = coerceNumber
+        self.default = dflt
         self.values = values
-        self.array_ok = array_ok
+        self.array_ok = arrayOk
 
     def validate_coerce(self, v):
         if v is None:
@@ -107,7 +108,7 @@ class EnumeratedValidator(BaseValidator):
                     parent_name=self.parent_name,
                     valid_vals=self.values
                 ))
-        else:
+        elif isinstance(v, str):
             if v not in self.values:
                 raise ValueError(
                     ('Invalid enumeration value "{v}" received for {name} property of {parent_name}\n' +
@@ -117,6 +118,11 @@ class EnumeratedValidator(BaseValidator):
                         parent_name=self.parent_name,
                         valid_vals=self.values
                     ))
+        else:
+            raise ValueError(("The {name} property of {parent_name} must be a string. "
+                              "Received value of type {typ}").format(name=self.name,
+                                                                     parent_name=self.parent_name,
+                                                                     typ=type(v)))
         return v
 
 
@@ -130,9 +136,9 @@ class BooleanValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, default):
+    def __init__(self, name, parent_name, dflt, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = default
+        self.default = dflt
 
     def validate_coerce(self, v):
         if v is None:
@@ -159,12 +165,12 @@ class NumberValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, default, min_val=None, max_val=None, array_ok=False):
+    def __init__(self, name, parent_name, dflt, min=None, max=None, arrayOk=False, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = default
-        self.min = min_val
-        self.max = max_val
-        self.array_ok = array_ok
+        self.default = dflt
+        self.min_val = min
+        self.max_val = max
+        self.array_ok = arrayOk
 
     def validate_coerce(self, v):
         if v is None:
@@ -187,10 +193,10 @@ class NumberValidator(BaseValidator):
                                   "Received value of type {typ}").format(name=self.name,
                                                                          parent_name=self.parent_name,
                                                                          typ=type(v)))
-            if self.min is not None and v < self.min:
+            if self.min_val is not None and v < self.min_val:
                 v = self.default
 
-            if self.max is not None and v > self.max:
+            if self.max_val is not None and v > self.max_val:
                 v = self.default
 
         return v
@@ -209,12 +215,12 @@ class IntegerValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, default, min_val=None, max_val=None, array_ok=False):
+    def __init__(self, name, parent_name, dflt, min=None, max=None, arrayOk=False, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = default
-        self.min = min_val
-        self.max = max_val
-        self.array_ok = array_ok
+        self.default = dflt
+        self.min_val = min
+        self.max_val = max
+        self.array_ok = arrayOk
 
     def validate_coerce(self, v):
         if v is None:
@@ -234,10 +240,10 @@ class IntegerValidator(BaseValidator):
                                                                          parent_name=self.parent_name,
                                                                          typ=type(v)))
 
-            if self.min is not None and v < self.min:
+            if self.min_val is not None and v < self.min_val:
                 v = self.default
 
-            if self.max is not None and v > self.max:
+            if self.max_val is not None and v > self.max_val:
                 v = self.default
 
         return v
@@ -257,12 +263,12 @@ class StringValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, default=NoDefault, no_blank=False, strict=False, array_ok=False, values=None):
+    def __init__(self, name, parent_name, dflt=NoDefault, noBlank=False, strict=False, arrayOk=False, values=None, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = default
-        self.no_blank = no_blank
+        self.default = dflt
+        self.no_blank = noBlank
         self.strict = strict
-        self.array_ok = array_ok
+        self.array_ok = arrayOk
         self.values = values
 
     def validate_coerce(self, v):
@@ -317,9 +323,10 @@ class ColorValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, default=None):
+    def __init__(self, name, parent_name, dflt=None, arrayOk=False, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = default
+        self.default = dflt
+        self.array_ok = arrayOk
 
     def validate_coerce(self, v):
         if v is None:
@@ -335,6 +342,7 @@ class ColorValidator(BaseValidator):
         return v
 
 
+class ColorscaleValidator(BaseValidator):
     """
         "colorscale": {
             "description": "A Plotly colorscale either picked by a name: (any of Greys, YlGnBu, Greens, YlOrRd, Bluered, RdBu, Reds, Blues, Picnic, Rainbow, Portland, Jet, Hot, Blackbody, Earth, Electric, Viridis ) customized as an {array} of 2-element {arrays} where the first element is the normalized color level value (starting at *0* and ending at *1*), and the second item is a valid color string.",
@@ -344,7 +352,22 @@ class ColorValidator(BaseValidator):
             ]
         },
     """
+    def __init__(self, name, parent_name, dflt=None, **_):
+        super().__init__(name=name, parent_name=parent_name)
+        self.default = dflt
 
+    def validate_coerce(self, v):
+        if v is None:
+            v = self.default
+        elif not isinstance(v, str):
+            raise ValueError(("The {name} property of {parent_name} must be a string. "
+                              "Received value of type {typ}").format(name=self.name,
+                                                                     parent_name=self.parent_name,
+                                                                     typ=type(v)))
+        return v
+
+
+class AngleValidator(BaseValidator):
     """
         "angle": {
             "description": "A number (in degree) between -180 and 180.",
@@ -354,7 +377,22 @@ class ColorValidator(BaseValidator):
             ]
         },
     """
+    def __init__(self, name, parent_name, dflt=None, **_):
+        super().__init__(name=name, parent_name=parent_name)
+        self.default = dflt
 
+    def validate_coerce(self, v):
+        if v is None:
+            v = self.default
+        elif not isinstance(v, numbers.Number):
+            raise ValueError(("The {name} property of {parent_name} must be a number. "
+                              "Received value of type {typ}").format(name=self.name,
+                                                                     parent_name=self.parent_name,
+                                                                     typ=type(v)))
+        return v
+
+
+class SubplotidValidator(BaseValidator):
     """
         "subplotid": {
             "description": "An id string of a subplot type (given by dflt), optionally followed by an integer >1. e.g. if dflt='geo', we can have 'geo', 'geo2', 'geo3', ...",
@@ -364,7 +402,28 @@ class ColorValidator(BaseValidator):
             "otherOpts": []
         },
     """
+    def __init__(self, name, parent_name, dflt, **_):
+        super().__init__(name=name, parent_name=parent_name)
+        self.default = dflt
 
+    def validate_coerce(self, v):
+        if v is None:
+            v = self.default
+        elif not isinstance(v, str):
+            raise ValueError(("The {name} property of {parent_name} must be a string. "
+                              "Received value of type {typ}").format(name=self.name,
+                                                                     parent_name=self.parent_name,
+                                                                     typ=type(v)))
+        elif not v.startswith(self.default):
+            raise ValueError(("The {name} property of {parent_name} must be a string prefixed by '{default}', "
+                              "optionally followed by an integer > 1\n"
+                              "Received '{v}'").format(name=self.name,
+                                                       parent_name=self.parent_name,
+                                                       default=self.default, v=v))
+        return v
+
+
+class FlaglistValidator(BaseValidator):
     """
         "flaglist": {
             "description": "A string representing a combination of flags (order does not matter here). Combine any of the available `flags` with *+*. (e.g. ('lines+markers')). Values in `extras` cannot be combined.",
@@ -378,7 +437,28 @@ class ColorValidator(BaseValidator):
             ]
         },
     """
+    def __init__(self, name, parent_name, flags, dflt=None, extras=None, arrayOk=False, **_):
+        super().__init__(name=name, parent_name=parent_name)
+        self.flags = flags
+        self.default = dflt
+        self.extras = extras
+        self.array_ok = arrayOk
 
+    def validate_coerce(self, v):
+        if v is None:
+            v = self.default
+
+        elif not isinstance(v, str):
+            raise ValueError(("The {name} property of {parent_name} must be a string. "
+                              "Received value of type {typ}").format(name=self.name,
+                                                                     parent_name=self.parent_name,
+                                                                     typ=type(v)))
+
+        # TODO: validate flag type
+        return v
+
+
+class AnyValidator(BaseValidator):
     """
         "any": {
             "description": "Any type.",
@@ -390,7 +470,21 @@ class ColorValidator(BaseValidator):
             ]
         },
     """
+    def __init__(self, name, parent_name, dflt=None, values=None, arrayOk=False):
+        super().__init__(name=name, parent_name=parent_name)
+        self.default = dflt
+        self.values = values
+        self.array_ok = arrayOk
 
+    def validate_coerce(self, v):
+        if v is None:
+            v = self.default
+
+        # TODO: Validate array_ok
+        return v
+
+
+class InfoArrayValidator(BaseValidator):
     """
         "info_array": {
             "description": "An {array} of plot information.",
@@ -403,6 +497,18 @@ class ColorValidator(BaseValidator):
             ]
         }
     """
+    def __init__(self, name, parent_name, items, dflt=None, freeLength=None):
+        super().__init__(name=name, parent_name=parent_name)
+        self.items = items
+        self.default = dflt
+        self.free_length = freeLength
+
+    def validate_coerce(self, v):
+        if v is None:
+            v = self.default
+
+        # TODO: Validate items
+        return v
 
 
 class CompoundValidator(BaseValidator):
@@ -426,5 +532,4 @@ class CompoundValidator(BaseValidator):
                                                                      cls_name=self.data_class.__name__,
                                                                      typ=type(v)))
 
-        # TODO: validate color types
         return v

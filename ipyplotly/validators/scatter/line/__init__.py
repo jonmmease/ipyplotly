@@ -11,5 +11,5 @@ class WidthValidator(bv.NumberValidator):
     def __init__(self):
         super().__init__(name='width',
                          parent_name='Line',
-                         default=2,
-                         min_val=0)
+                         dflt=2,
+                         min=0)

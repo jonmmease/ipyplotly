@@ -26,8 +26,6 @@ class Scatter(BaseTraceType):
 
     # x
     # -
-
-
     @property
     def x(self) -> typ.List:
         """
