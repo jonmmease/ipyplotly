@@ -12,3 +12,5 @@ ipyplotly/static/
 .DS_Store
 
 .idea/
+
+codegen/output

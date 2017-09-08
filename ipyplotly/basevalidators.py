@@ -81,7 +81,7 @@ class EnumeratedValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt, values, arrayOk=False, coerceNumber=False, **_):
+    def __init__(self, name, parent_name, values, dflt=NoDefault, arrayOk=False, coerceNumber=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.coerce_number = coerceNumber
         self.default = dflt
@@ -136,7 +136,7 @@ class BooleanValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt, **_):
+    def __init__(self, name, parent_name, dflt=NoDefault, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
 
@@ -165,7 +165,7 @@ class NumberValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt, min=None, max=None, arrayOk=False, **_):
+    def __init__(self, name, parent_name, dflt=NoDefault, min=None, max=None, arrayOk=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
         self.min_val = min
@@ -215,7 +215,7 @@ class IntegerValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt, min=None, max=None, arrayOk=False, **_):
+    def __init__(self, name, parent_name, dflt=NoDefault, min=None, max=None, arrayOk=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
         self.min_val = min
@@ -402,7 +402,7 @@ class SubplotidValidator(BaseValidator):
             "otherOpts": []
         },
     """
-    def __init__(self, name, parent_name, dflt, **_):
+    def __init__(self, name, parent_name, dflt=NoDefault, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
 
