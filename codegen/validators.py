@@ -1,5 +1,6 @@
 import os
 import os.path as opath
+import shutil
 from io import StringIO
 from yapf.yapflib.yapf_api import FormatCode
 
@@ -23,7 +24,7 @@ def build_validators_py(plotly_schema, prop_path):
                       if is_trace_prop_compound(props_info[name])]
 
     if compound_types:
-        buffer.write(f'from ipyplotly.datatypes.trace.{prop_path_str} import {", ".join(compound_types)}')
+        buffer.write(f'from ipyplotly.datatypes.trace.{prop_path_str} import ({", ".join(compound_types)})')
     buffer.write('\n\n')
 
     # Validator classes
@@ -57,8 +58,6 @@ class {to_pascal_case(name)}Validator(bv.{to_pascal_case(base)}Validator):
 
 def write_validator_py(outdir, plotly_schema, prop_path):
 
-
-
     # Generate source code
     # --------------------
     validator_source = build_validators_py(plotly_schema, prop_path)
@@ -69,7 +68,13 @@ def write_validator_py(outdir, plotly_schema, prop_path):
 
     # Write file
     # ----------
-    filedir = opath.join(outdir, 'validators', *prop_path)
+    filedir = opath.join(outdir, 'validators', 'trace', *prop_path)
+
+    # ### Create output directory
+    if opath.exists(filedir):
+        shutil.rmtree(filedir)
+    os.makedirs(filedir)
+
     filepath = opath.join(filedir, '__init__.py')
     os.makedirs(filedir, exist_ok=True)
     with open(filepath, 'wt') as f:

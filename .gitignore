@@ -13,4 +13,5 @@ ipyplotly/static/
 
 .idea/
 
-codegen/output
+ipyplotly/validators
+ipyplotly/datatypes

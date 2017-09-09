@@ -6,19 +6,13 @@ import os
 import os.path as opath
 import shutil
 
-from codegen.datatypes import build_datatypes_py
+from codegen.datatypes import build_datatypes_py, write_datatypes_py
 from codegen.utils import get_trace_prop_paths
 from codegen.validators import write_validator_py
 
 if __name__ == '__main__':
 
-    # Create output directory
-    # -----------------------
     outdir = 'ipyplotly/'
-    if opath.exists(outdir):
-        shutil.rmtree(outdir)
-
-    os.mkdir(outdir)
 
     # Load plotly schema
     # ------------------
@@ -29,14 +23,21 @@ if __name__ == '__main__':
     # ----------------------
     prop_paths = get_trace_prop_paths(plotly_schema)
 
-    # Write out validators
-    # --------------------
+    # Write out datatypes
+    # -------------------
+    filedir = opath.join(outdir, 'datatypes')
+    if opath.exists(filedir):
+        shutil.rmtree(filedir)
+
     for prop_path in prop_paths:
-        res = build_datatypes_py(plotly_schema, prop_path)
-        print(res)
+        write_datatypes_py(outdir, plotly_schema, prop_path)
 
     # Write out validators
     # --------------------
-    # for prop_path in prop_paths:
-    #     write_validator_py(outdir, plotly_schema, prop_path)
+    filedir = opath.join(outdir, 'validators')
+    if opath.exists(filedir):
+        shutil.rmtree(filedir)
+
+    for prop_path in prop_paths:
+        write_validator_py(outdir, plotly_schema, prop_path)
 
