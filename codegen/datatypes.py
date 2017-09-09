@@ -5,7 +5,7 @@ import os.path as opath
 from yapf.yapflib.yapf_api import FormatCode
 from codegen.utils import to_pascal_case, to_undercase, trace_index, is_trace_prop, is_trace_prop_compound, \
     is_trace_prop_simple
-
+import textwrap
 
 # Not working. Need to rework what is passed in here
 def build_datatypes_py(plotly_schema, prop_path):
@@ -52,7 +52,10 @@ class {to_pascal_case(prop)}(BaseTraceType):\n""")
 
             under_subprop = to_undercase(subprop)
             prop_type = 'typ.Any'
-            subprop_description = subprop_info.get('description', '')
+            raw_description = subprop_info.get('description', '')
+            subprop_description = '\n'.join(textwrap.wrap(raw_description,
+                                                          subsequent_indent=' ' * 8,
+                                                          width=80 - 8))
 
             if is_trace_prop_simple(subprop_info):
                 buffer.write(f"""\
