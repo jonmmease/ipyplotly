@@ -1,7 +1,7 @@
 import typing as typ
 
 from ipyplotly.basedatatypes import BaseTraceType
-from ipyplotly.validators.scatter import OpacityValidator, XValidator, YValidator, NameValidator, LineValidator
+from ipyplotly.validators2.scatter import OpacityValidator, XValidator, YValidator, NameValidator, LineValidator
 
 
 class Scatter(BaseTraceType):

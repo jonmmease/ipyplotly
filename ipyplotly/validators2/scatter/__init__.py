@@ -1,5 +1,5 @@
 import ipyplotly.basevalidators as bv
-from ipyplotly.datatypes.trace.scatter import *
+from ipyplotly.datatypes2.trace.scatter import *
 
 
 # class OpacityValidator(bv.NumberValidator):

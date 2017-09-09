@@ -1,5 +1,5 @@
 from ipyplotly.basedatatypes import BaseTraceType
-from ipyplotly.validators.scatter.line import *
+from ipyplotly.validators2.scatter.line import *
 
 
 class Line(BaseTraceType):

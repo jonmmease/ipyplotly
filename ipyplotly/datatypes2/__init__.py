@@ -1,4 +1,4 @@
-from ipyplotly.datatypes.trace import *
+from ipyplotly.datatypes2.trace import *
 from ipyplotly.basedatatypes import BaseFigureWidget
 
 
