@@ -15,7 +15,6 @@ def build_datatypes_py(plotly_schema, prop_path):
     # -----------------
     props_info = trace_index(plotly_schema, prop_path)
 
-
     # Imports
     # -------
     buffer.write('import typing as typ\n')
@@ -39,17 +38,15 @@ def build_datatypes_py(plotly_schema, prop_path):
         if not is_trace_prop_compound(prop_info):
             continue
 
-        # ### Class definition
+        # ### Class definition ###
         buffer.write(f"""
 
 class {to_pascal_case(prop)}(BaseTraceType):\n""")
 
-        # ### Property definitions
-        for subprop in prop_info:
+        # ### Property definitions ###
+        subprops = [p for p in prop_info if is_trace_prop(prop_info[p])]
+        for subprop in subprops:
             subprop_info = prop_info[subprop]
-            if not is_trace_prop(subprop_info):
-                continue
-
             under_subprop = to_undercase(subprop)
             prop_type = 'typ.Any'
             raw_description = subprop_info.get('description', '')
@@ -88,6 +85,20 @@ class {to_pascal_case(prop)}(BaseTraceType):\n""")
     @{under_subprop}.setter
     def {under_subprop}(self, val):
         self._{under_subprop} = self._set_compound_prop('{under_subprop}', val, self._{under_subprop})\n""")
+
+        # ### Constructor ###
+        buffer.write(f"""
+    def __init__(self,""")
+        for i, subprop in enumerate(subprops):
+            subprop_info = prop_info[subprop]
+            under_subprop = to_undercase(subprop)
+            dflt = subprop_info.get('dflt', None)
+            is_last = i == len(subprops) - 1
+            buffer.write(f"""
+            {under_subprop}={repr(dflt)}{',' if not is_last else ''} """)
+        buffer.write("""
+        ):
+        pass""")
 
     return buffer.getvalue()
 
