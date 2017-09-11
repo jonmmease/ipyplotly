@@ -73,12 +73,19 @@ class BaseTraceType:
         validator = self._validators.get(prop)
         val = validator.validate_coerce(val)
 
-        if isinstance(validator, CompoundValidator):
-            # Reparent
-            val.parent = self
-            dict_val = val._data
-        else:
-            dict_val = val
+        if prop not in self._data or self._data[prop] != val:
+            self._data[prop] = val
+            self._send_restyle(prop, val)
+
+    def _set_compound_prop(self, prop, val, curr_val):
+        validator = self._validators.get(prop)
+        val = validator.validate_coerce(val)
+
+        # Reparent
+        val.parent = self
+        dict_val = val._data
+        if curr_val is not None and curr_val is not val:
+            curr_val.parent = None
 
         if prop not in self._data or self._data[prop] != dict_val:
             self._data[prop] = dict_val

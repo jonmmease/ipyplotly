@@ -76,15 +76,7 @@ class Scatter(BaseTraceType):
 
     @line.setter
     def line(self, val):
-        new_line = self._set_prop('line', val)
-
-        # TODO: make separate _set_prop method for compound props that handles parenting
-        curr_line = self._line
-        if curr_line is not None and curr_line is not new_line:
-            # Unparent current line
-            curr_line.parent = None
-
-        self._line = new_line
+        self._line = self._set_compound_prop('line', val, self._line)
 
     def __init__(self,
                  x,
