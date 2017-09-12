@@ -42,7 +42,7 @@ class DataArrayValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=NoDefault, **_):
+    def __init__(self, name, parent_name, dflt=None, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
 
@@ -60,7 +60,7 @@ class DataArrayValidator(BaseValidator):
                                  "Received value of type {typ}").format(name=self.name,
                                                                         parent_name=self.parent_name,
                                                                         typ=type(v)))
-        return list(v)
+        return v
 
     @staticmethod
     def is_array(v):
@@ -81,12 +81,12 @@ class EnumeratedValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, values, dflt=NoDefault, arrayOk=False, coerceNumber=False, **_):
+    def __init__(self, name, parent_name, values, dflt=None, array_ok=False, coerceNumber=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.coerce_number = coerceNumber
         self.default = dflt
         self.values = values
-        self.array_ok = arrayOk
+        self.array_ok = array_ok
 
     def validate_coerce(self, v):
         if v is None:
@@ -108,7 +108,7 @@ class EnumeratedValidator(BaseValidator):
                     parent_name=self.parent_name,
                     valid_vals=self.values
                 ))
-        elif isinstance(v, str):
+        else:
             if v not in self.values:
                 raise ValueError(
                     ('Invalid enumeration value "{v}" received for {name} property of {parent_name}\n' +
@@ -118,11 +118,7 @@ class EnumeratedValidator(BaseValidator):
                         parent_name=self.parent_name,
                         valid_vals=self.values
                     ))
-        else:
-            raise ValueError(("The {name} property of {parent_name} must be a string. "
-                              "Received value of type {typ}").format(name=self.name,
-                                                                     parent_name=self.parent_name,
-                                                                     typ=type(v)))
+
         return v
 
 
@@ -136,7 +132,7 @@ class BooleanValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=NoDefault, **_):
+    def __init__(self, name, parent_name, dflt=None, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
 
@@ -165,16 +161,16 @@ class NumberValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=NoDefault, min=None, max=None, arrayOk=False, **_):
+    def __init__(self, name, parent_name, dflt=None, min=None, max=None, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
         self.min_val = min
         self.max_val = max
-        self.array_ok = arrayOk
+        self.array_ok = array_ok
 
     def validate_coerce(self, v):
         if v is None:
-            if self.default is None:
+            if self.default is NoDefault:
                 raise ValueError(('The {name} property of {parent_name} has no default value '
                                   'and may not be set to None.'.format(name=self.name, parent_name=self.parent_name)))
             else:
@@ -215,12 +211,12 @@ class IntegerValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=NoDefault, min=None, max=None, arrayOk=False, **_):
+    def __init__(self, name, parent_name, dflt=None, min=None, max=None, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
         self.min_val = min
         self.max_val = max
-        self.array_ok = arrayOk
+        self.array_ok = array_ok
 
     def validate_coerce(self, v):
         if v is None:
@@ -263,12 +259,12 @@ class StringValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=NoDefault, noBlank=False, strict=False, arrayOk=False, values=None, **_):
+    def __init__(self, name, parent_name, dflt=None, noBlank=False, strict=False, array_ok=False, values=None, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
         self.no_blank = noBlank
         self.strict = strict
-        self.array_ok = arrayOk
+        self.array_ok = array_ok
         self.values = values
 
     def validate_coerce(self, v):
@@ -323,10 +319,10 @@ class ColorValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=None, arrayOk=False, **_):
+    def __init__(self, name, parent_name, dflt=None, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
-        self.array_ok = arrayOk
+        self.array_ok = array_ok
 
     def validate_coerce(self, v):
         if v is None:
@@ -384,11 +380,7 @@ class AngleValidator(BaseValidator):
     def validate_coerce(self, v):
         if v is None:
             v = self.default
-        elif not isinstance(v, numbers.Number):
-            raise ValueError(("The {name} property of {parent_name} must be a number. "
-                              "Received value of type {typ}").format(name=self.name,
-                                                                     parent_name=self.parent_name,
-                                                                     typ=type(v)))
+
         return v
 
 
@@ -402,7 +394,7 @@ class SubplotidValidator(BaseValidator):
             "otherOpts": []
         },
     """
-    def __init__(self, name, parent_name, dflt=NoDefault, **_):
+    def __init__(self, name, parent_name, dflt=None, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
 
@@ -437,12 +429,12 @@ class FlaglistValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, flags, dflt=None, extras=None, arrayOk=False, **_):
+    def __init__(self, name, parent_name, flags, dflt=None, extras=None, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.flags = flags
         self.default = dflt
         self.extras = extras
-        self.array_ok = arrayOk
+        self.array_ok = array_ok
 
     def validate_coerce(self, v):
         if v is None:
@@ -470,11 +462,11 @@ class AnyValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=None, values=None, arrayOk=False):
+    def __init__(self, name, parent_name, dflt=None, values=None, array_ok=False):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
         self.values = values
-        self.array_ok = arrayOk
+        self.array_ok = array_ok
 
     def validate_coerce(self, v):
         if v is None:

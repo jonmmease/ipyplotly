@@ -1,13 +1,10 @@
-import shutil
 from io import StringIO
 import os
 import os.path as opath
-from typing import List
-
-from yapf.yapflib.yapf_api import FormatCode
-from codegen.utils import to_pascal_case, to_undercase, trace_index, is_trace_prop, is_trace_prop_compound, \
-    is_trace_prop_simple, TraceNode
 import textwrap
+
+from codegen.utils import TraceNode, format_source
+
 
 def get_typing_type(plotly_type, array_ok=False):
     if plotly_type in ('data_array', 'info_array'):
@@ -39,19 +36,19 @@ def build_datatypes_py(parent_node: TraceNode):
     # -------
     buffer.write('from typing import *\n')
     buffer.write('from numbers import Number\n')
-    buffer.write('from ipyplotly.basedatatypes import BaseTraceType\n')
+    buffer.write('from ipyplotly.basedatatypes import (BaseTraceType, BaseFigureWidget)\n')
 
     compound_nodes = parent_node.child_compound_datatypes
 
     if compound_nodes:
-        datatypes_csv = ', '.join([n.name for n in compound_nodes])
+        datatypes_csv = ', '.join([f'{n.name} as d_{n.name}' for n in compound_nodes])
         validators_csv = ', '.join([f'{n.name} as v_{n.name}' for n in compound_nodes])
 
         buffer.write(f'from ipyplotly.validators.trace{parent_node.trace_pkg_str} import ({validators_csv})\n')
         buffer.write(f'from ipyplotly.datatypes.trace{parent_node.trace_pkg_str} import ({datatypes_csv})\n')
 
-    # Properties loop
-    # ---------------
+    # Compound datatypes loop
+    # -----------------------
     for compound_node in compound_nodes:
 
         # ### Class definition ###
@@ -62,7 +59,7 @@ class {compound_node.name_pascal_case}(BaseTraceType):\n""")
         # ### Property definitions ###
         for subtype_node in compound_node.child_datatypes:
             if subtype_node.is_compound:
-                prop_type = f'{compound_node.name}.{subtype_node.name_pascal_case}'
+                prop_type = f'd_{compound_node.name}.{subtype_node.name_pascal_case}'
             else:
                 prop_type = get_typing_type(subtype_node.datatype)
 
@@ -106,44 +103,13 @@ class {compound_node.name_pascal_case}(BaseTraceType):\n""")
 
         # ### Constructor ###
         buffer.write(f"""
-    def __init__(self,""")
-        for i, subtype_node in enumerate(compound_node.child_datatypes):
-            under_name = subtype_node.name_undercase
-            dflt = subtype_node.node_data.get('dflt', None)
-            is_last = i == len(compound_node.child_datatypes) - 1
-            buffer.write(f"""
-            {under_name}={repr(dflt)}{',' if not is_last else ''} """)
-        buffer.write("""
-        ):""")
+    def __init__(self""")
 
-        # ### Docstring ###
-        buffer.write(f"""
-        \"\"\"
-        Construct a new {compound_node.name_pascal_case} object
-        
-        Parameters
-        ----------""")
-        for subtype_node in compound_node.child_datatypes:
-            under_name = subtype_node.name_undercase
-            raw_description = subtype_node.description
-            subtype_description = '\n'.join(textwrap.wrap(raw_description,
-                                                          subsequent_indent=' ' * 12,
-                                                          width=119 - 12))
-
-            buffer.write(f"""
-        {under_name}
-            {subtype_description}""")
-
-        # #### close docstring ####
-        buffer.write(f"""
-
-        Returns
-        -------
-        {compound_node.name_pascal_case}
-        \"\"\"""")
+        add_constructor_params(buffer, compound_node)
+        add_docstring(buffer, compound_node)
 
         buffer.write(f"""
-        super().__init__('{compound_node.parent_path_str}')
+        super().__init__('{compound_node.name}')
 
         # Initialize data dict
         # --------------------
@@ -180,15 +146,51 @@ class {compound_node.name_pascal_case}(BaseTraceType):\n""")
     return buffer.getvalue()
 
 
+def add_constructor_params(buffer, compound_node, colon=True):
+    for i, subtype_node in enumerate(compound_node.child_datatypes):
+        under_name = subtype_node.name_undercase
+        dflt = subtype_node.node_data.get('dflt', None)
+        is_last = i == len(compound_node.child_datatypes) - 1
+        buffer.write(f""",
+            {under_name}={repr(dflt)}""")
+    buffer.write(f"""
+        ){':' if colon else ''}""")
+
+
+def add_docstring(buffer, compound_node):
+    # ### Docstring ###
+    buffer.write(f"""
+        \"\"\"
+        Construct a new {compound_node.name_pascal_case} object
+        
+        Parameters
+        ----------""")
+    for subtype_node in compound_node.child_datatypes:
+        under_name = subtype_node.name_undercase
+        raw_description = subtype_node.description
+        subtype_description = '\n'.join(textwrap.wrap(raw_description,
+                                                      subsequent_indent=' ' * 12,
+                                                      width=119 - 12))
+
+        buffer.write(f"""
+        {under_name}
+            {subtype_description}""")
+
+    # #### close docstring ####
+    buffer.write(f"""
+
+        Returns
+        -------
+        {compound_node.name_pascal_case}
+        \"\"\"""")
+
+
 def write_datatypes_py(outdir, node: TraceNode):
 
     # Generate source code
     # --------------------
     datatype_source = build_datatypes_py(node)
-
-    formatted_source, _ = FormatCode(datatype_source,
-                                     style_config={'based_on_style': 'google',
-                                                   'DEDENT_CLOSING_BRACKETS': True})
+    formatted_source = format_source(datatype_source)
 
     # Write file
     # ----------
@@ -200,4 +202,66 @@ def write_datatypes_py(outdir, node: TraceNode):
         f.write(formatted_source)
 
 
+def build_figure_py(base_node: TraceNode):
+    buffer = StringIO()
+    trace_nodes = base_node.child_compound_datatypes
+
+    # Imports
+    # -------
+    buffer.write('from ipyplotly.basedatatypes import BaseFigureWidget\n')
+
+    trace_types_csv = ', '.join([n.name_pascal_case for n in trace_nodes])
+    buffer.write(f'from ipyplotly.datatypes.trace import ({trace_types_csv})\n')
+
+    buffer.write("""
+    
+class Figure(BaseFigureWidget):\n""")
+
+    for trace_node in trace_nodes:
+
+        # Function signature
+        # ------------------
+        buffer.write(f"""
+    def add_{trace_node.name}(self""")
+
+        add_constructor_params(buffer, trace_node)
+        add_docstring(buffer, trace_node)
+
+        # Function body
+        # -------------
+        buffer.write(f"""
+        new_trace = {trace_node.name_pascal_case}(
+        """)
+
+        for i, subtype_node in enumerate(trace_node.child_datatypes):
+            under_name = subtype_node.name_undercase
+            is_last = i == len(trace_node.child_datatypes) - 1
+            buffer.write(f"""
+                {under_name}={under_name}{'' if is_last else ','}""")
+
+        buffer.write(f"""
+            )""")
+
+        buffer.write(f"""
+        new_trace.parent = self
+        return self._add_trace(new_trace)""")
+
+    buffer.write('\n')
+    return buffer.getvalue()
+
+
+def append_figure_class(outdir, base_node: TraceNode):
+
+    if base_node.trace_path:
+        raise ValueError('Expected root trace node. Received node with path "%s"' % base_node.trace_path_str)
+
+    figure_source = build_figure_py(base_node)
+    formatted_source = format_source(figure_source)
+
+    # Append to file
+    # --------------
+    filepath = opath.join(outdir, '__init__.py')
+
+    with open(filepath, 'w') as f:
+        f.write(formatted_source)
 

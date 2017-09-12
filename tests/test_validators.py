@@ -8,7 +8,7 @@ import numpy as np
 @pytest.fixture(params=['first', 'forth'])
 def enumerated_validator_anok(request):
     values = ['first', 'second', 'third', 'forth']
-    return EnumeratedValidator('prop', 'parent', values, request.param, arrayOk=False)
+    return EnumeratedValidator('prop', 'parent', values, request.param, array_ok=False)
 
 
 @pytest.mark.parametrize('val',

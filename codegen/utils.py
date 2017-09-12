@@ -1,8 +1,19 @@
+from typing import List
+from yapf.yapflib.yapf_api import FormatCode
+
+
+def format_source(validator_source):
+    formatted_source, _ = FormatCode(validator_source,
+                                     style_config={'based_on_style': 'google',
+                                                   'DEDENT_CLOSING_BRACKETS': True,
+                                                   'COLUMN_LIMIT': 119})
+    return formatted_source
+
 
 class TraceNode:
 
     @staticmethod
-    def get_all_compound_datatype_nodes(plotly_schema):
+    def get_all_compound_datatype_nodes(plotly_schema) -> List['TraceNode']:
         nodes = []
         nodes_to_process = [TraceNode(plotly_schema)]
 
@@ -37,21 +48,18 @@ class TraceNode:
         return node_data
 
     @property
-    def name(self):
+    def name(self) -> str:
         if len(self.trace_path) == 0:
             'trace'
-        elif len(self.trace_path) == 1:
-            # Use {"trace_name": {"meta": {"hrName": "hr_name"}}} if available
-            return self.plotly_schema['schema']['traces'][self.trace_path[0]]['meta'].get('hrName', self.trace_path[0])
         else:
             return self.trace_path[-1]
 
     @property
-    def name_pascal_case(self):
+    def name_pascal_case(self) -> str:
         return self.name.title().replace('_', '')
 
     @property
-    def name_undercase(self):
+    def name_undercase(self) -> str:
         # Lowercase leading char
         # ----------------------
         name1 = self.name[0].lower() + self.name[1:]
@@ -63,7 +71,7 @@ class TraceNode:
         return name2
 
     @property
-    def description(self):
+    def description(self) -> str:
         if len(self.trace_path) == 0:
             return ""
         elif len(self.trace_path) == 1:
@@ -72,7 +80,7 @@ class TraceNode:
             return self.node_data.get('description', '')
 
     @property
-    def datatype(self):
+    def datatype(self) -> str:
         if self.is_compound:
             return 'compound'
         elif self.is_simple:
@@ -81,30 +89,34 @@ class TraceNode:
             return 'literal'
 
     @property
-    def is_compound(self):
+    def datatype_pascal_case(self) -> str:
+        return self.datatype.title().replace('_', '')
+
+    @property
+    def is_compound(self) -> bool:
         if len(self.trace_path) < 2:
             return True
         else:
             return isinstance(self.node_data, dict) and self.node_data.get('role', '') == 'object'
 
     @property
-    def is_simple(self):
+    def is_simple(self) -> bool:
         return isinstance(self.node_data, dict) and 'valType' in self.node_data
 
     @property
-    def is_datatype(self):
+    def is_datatype(self) -> bool:
         return self.is_simple or self.is_compound
 
     @property
-    def trace_path_str(self, leading_dot=True):
+    def trace_path_str(self) -> str:
         return '.'.join(self.trace_path)
 
     @property
-    def parent_path_str(self, leading_dot=True):
+    def parent_path_str(self) -> str:
         return '.'.join(self.trace_path[:-1])
 
     @property
-    def trace_pkg_str(self):
+    def trace_pkg_str(self) -> str:
         path_str = ''
         for p in self.trace_path:
             path_str += '.' + p

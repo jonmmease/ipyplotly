@@ -2,73 +2,63 @@ import os
 import os.path as opath
 import shutil
 from io import StringIO
-from yapf.yapflib.yapf_api import FormatCode
+from codegen.utils import TraceNode, format_source
 
-from codegen.utils import to_pascal_case, trace_index, is_trace_prop_compound, is_trace_prop
-
-
-def build_validators_py(plotly_schema, prop_path):
+def build_validators_py(parent_node: TraceNode):
     buffer = StringIO()
-
-    # Lookup props info
-    # -----------------
-    props_info = trace_index(plotly_schema, prop_path)
-    prop_path_str = '.'.join(prop_path)
 
     # Imports
     # -------
     buffer.write('import ipyplotly.basevalidators as bv\n')
 
-    # ### Compute compound types
-    compound_types = [to_pascal_case(name) for name in props_info
-                      if is_trace_prop_compound(props_info[name])]
+    # Compound datatypes loop
+    # -----------------------
+    datatype_nodes = parent_node.child_datatypes
+    for datatype_node in datatype_nodes:
 
-    if compound_types:
-        buffer.write(f'from ipyplotly.datatypes.trace.{prop_path_str} import ({", ".join(compound_types)})')
-    buffer.write('\n\n')
+        buffer.write(f"""
+        
+class {datatype_node.name_pascal_case}Validator(bv.{datatype_node.datatype_pascal_case}Validator):
+    def __init__(self):""")
 
-    # Validator classes
-    # -----------------
-    for name, prop_info in props_info.items():
-        if not is_trace_prop(prop_info):
-            continue
+        # Add import
+        if datatype_node.is_compound:
+            buffer.write(f"""
+        from ipyplotly.datatypes.trace{parent_node.trace_pkg_str} import {datatype_node.name_pascal_case}""")
 
-        base = prop_info.get('valType', 'compound')
-        attr_names = [k for k in prop_info if k not in ['valType', 'description', 'role']]
+        buffer.write(f"""
+        super().__init__(name='{datatype_node.name}',
+                         parent_name='{datatype_node.parent_path_str}'""")
 
-        buffer.write(f"""\
-class {to_pascal_case(name)}Validator(bv.{to_pascal_case(base)}Validator):
-    def __init__(self):
-        super().__init__(name='{name}',
-                         parent_name='{prop_path_str}'""")
-
-        if base == 'compound':
+        if datatype_node.is_compound:
             buffer.write(f""",
-                         data_class={to_pascal_case(name)}""")
+                         data_class={datatype_node.name_pascal_case}""")
         else:
-            for i, attr_name in enumerate(attr_names):
-                is_last = i == len(attr_names) - 1
+            assert datatype_node.is_simple
+
+            attr_nodes = [n for n in datatype_node.simple_attrs
+                          if n.name not in ['valType', 'description', 'role']]
+            for i, attr_node in enumerate(attr_nodes):
+                is_last = i == len(attr_nodes) - 1
                 buffer.write(f""",
-                         {attr_name}={repr(prop_info[attr_name])}""")
+                         {attr_node.name_undercase}={repr(attr_node.node_data)}""")
+
         buffer.write(')')
-        buffer.write('\n\n')
 
     return buffer.getvalue()
 
 
-def write_validator_py(outdir, plotly_schema, prop_path):
+def write_validator_py(outdir, node: TraceNode):
 
     # Generate source code
     # --------------------
-    validator_source = build_validators_py(plotly_schema, prop_path)
+    validator_source = build_validators_py(node)
 
-    formatted_source, _ = FormatCode(validator_source,
-                                     style_config={'based_on_style': 'google',
-                                                   'DEDENT_CLOSING_BRACKETS': True})
+    formatted_source = format_source(validator_source)
 
     # Write file
     # ----------
-    filedir = opath.join(outdir, 'validators', 'trace', *prop_path)
+    filedir = opath.join(outdir, 'validators', 'trace', *node.trace_path)
 
     # ### Create output directory
     if opath.exists(filedir):
