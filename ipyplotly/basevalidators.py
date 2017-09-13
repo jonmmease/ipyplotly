@@ -1,5 +1,5 @@
 import numbers
-
+import collections
 
 # Notes: These become base validator classes, one for each value type. The code-gen validators for primitive types
 # subclass these (hand written) base validator types. compound validators are composed of other compound validators
@@ -99,11 +99,12 @@ class EnumeratedValidator(BaseValidator):
                                                                           parent_name=self.parent_name,
                                                                           typ=type(v))))
 
-            invalid_vals = [e for e in v if e not in self.values]
+            invalid_vals = [e for e in v if (not isinstance(e, collections.Hashable)) or (e not in self.values)]
             if invalid_vals:
-                raise ValueError(('Invalid enumeration value(s) "{csv}" received for {name} property of {parent_name}\n' +
+                raise ValueError(('Invalid enumeration element(s) received for {name} '
+                                  'property of {parent_name}: [{csv}]\n'
                                   'Valid values are: {valid_vals}').format(
-                    csv=", ".join(invalid_vals),
+                    csv=", ".join([repr(v) for v in invalid_vals]),
                     name=self.name,
                     parent_name=self.parent_name,
                     valid_vals=self.values
@@ -111,7 +112,7 @@ class EnumeratedValidator(BaseValidator):
         else:
             if v not in self.values:
                 raise ValueError(
-                    ('Invalid enumeration value "{v}" received for {name} property of {parent_name}\n' +
+                    ('Invalid enumeration value received for {name} property of {parent_name}: "{v}"\n' +
                      'Valid values are: {valid_vals}').format(
                         v=v,
                         name=self.name,

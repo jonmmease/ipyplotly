@@ -5,19 +5,80 @@ import numpy as np
 
 # Enumerated Validator
 # ====================
+
+# Array not ok
+# ------------
 @pytest.fixture(params=['first', 'forth'])
 def enumerated_validator_anok(request):
-    values = ['first', 'second', 'third', 'forth']
+    values = ['first', 'second', 'third', 4]
     return EnumeratedValidator('prop', 'parent', values, request.param, array_ok=False)
 
 
+# ### Acceptance ###
 @pytest.mark.parametrize('val',
-                         [True, 0, 1, 23, np.inf, ['first']])
-def test_enumeratored_validator_rejection_by_type(val, enumerated_validator_anok):
+                         ['first', 'second', 'third', 4])
+def test_enumeration_validator_acceptance_anok(val, enumerated_validator_anok):
+    # Values should be accepted and returned unchanged
+    assert enumerated_validator_anok.validate_coerce(val) == val
+
+
+# ### Value Rejection ###
+@pytest.mark.parametrize('val',
+                         [True, 0, 1, 23, np.inf, set()])
+def test_enumeratored_validator_rejection_by_value_anok(val, enumerated_validator_anok):
     with pytest.raises(ValueError) as validation_failure:
         enumerated_validator_anok.validate_coerce(val)
 
-    assert 'must be a string' in str(validation_failure.value)
+    assert 'Invalid enumeration value' in str(validation_failure.value)
+
+
+# ### Array Rejection ###
+@pytest.mark.parametrize('val',
+                         [['first', 'second'], [True], ['third', 4], [4]])
+def test_enumeratored_validator_rejection_by_array_anok(val, enumerated_validator_anok):
+    with pytest.raises(ValueError) as validation_failure:
+        enumerated_validator_anok.validate_coerce(val)
+
+    assert 'must be a scalar value' in str(validation_failure.value)
+
+
+# Array ok
+# --------
+@pytest.fixture(params=['first', 'forth'])
+def enumerated_validator_aok(request):
+    values = ['first', 'second', 'third', 4]
+    return EnumeratedValidator('prop', 'parent', values, request.param, array_ok=True)
+
+
+# ### Acceptance ###
+@pytest.mark.parametrize('val',
+                         ['first', 'second', 'third', 4,
+                          [], ['first', 4], [4], ['third', 'first'],
+                          ['first', 'second', 'third', 4]])
+def test_enumeration_validator_acceptance_aok(val, enumerated_validator_aok):
+    # Values should be accepted and returned unchanged
+    assert enumerated_validator_aok.validate_coerce(val) == val
+
+
+# ### Rejection by value ###
+@pytest.mark.parametrize('val',
+                         [True, 0, 1, 23, np.inf, set()])
+def test_enumeratored_validator_rejection_by_value_aok(val, enumerated_validator_aok):
+    with pytest.raises(ValueError) as validation_failure:
+        enumerated_validator_aok.validate_coerce(val)
+
+    assert 'Invalid enumeration value' in str(validation_failure.value)
+
+
+# ### Reject by elements ###
+@pytest.mark.parametrize('val',
+                         [[True], [0], [1, 23], [np.inf, set()],
+                          ['ffirstt', 'second', 'third']])
+def test_enumeratored_validator_rejection_by_element_aok(val, enumerated_validator_aok):
+    with pytest.raises(ValueError) as validation_failure:
+        enumerated_validator_aok.validate_coerce(val)
+
+    assert 'Invalid enumeration element(s)' in str(validation_failure.value)
 
 # Boolean Validator
 # =================
