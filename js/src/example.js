@@ -17,7 +17,8 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
         // Message properties
         _plotly_addTraces: null,
-        _plotly_restyle: null
+        _plotly_restyle: null,
+        _plotly_addTraceDeltas: []
     })
 });
 
@@ -33,6 +34,15 @@ var FigureView = widgets.DOMWidgetView.extend({
 
         this.model.on('change:_plotly_addTraces', this.do_addTraces, this);
         this.model.on('change:_plotly_restyle', this.do_restyle, this);
+
+        // Plotly events
+        this.el.on('plotly_restyle', this.handle_restyle, this);
+    },
+
+    handle_restyle: function (update, inds) {
+        console.log("plotly_restyle");
+        console.log(update);
+        console.log(inds);
     },
 
     do_addTraces: function () {
@@ -40,10 +50,19 @@ var FigureView = widgets.DOMWidgetView.extend({
 
         var data = this.model.get('_plotly_addTraces');
         if (data !== null) {
+            var prev_num_traces = this.el._fullData.length;
             Plotly.addTraces(this.el, data);
 
-            // this.model.set('_plotly_addTraces', null);
-            // this.model.save_changes();
+            // Loop over new traces
+            var traceDeltas = new Array(data.length);
+            for(var i=0; i < data.length; i++) {
+                var fullTraceData = this.el._fullData[i + prev_num_traces];
+                var traceData = data[i];
+                traceDeltas[i] = this.create_delta_object(traceData, fullTraceData);
+            }
+
+            this.model.set('_plotly_addTraceDeltas', traceDeltas);
+            this.touch();
         }
     },
 
@@ -53,15 +72,32 @@ var FigureView = widgets.DOMWidgetView.extend({
             var style = data[0];
             var idx = data[1];
             if (idx !== null) {
-                Plotly.restyle(this.el, style, idx)
+                Plotly.restyle(this.el, style, idx);
             } else {
-                Plotly.restyle(this.el, style)
+                Plotly.restyle(this.el, style);
             }
-
-            // this.model.set('_plotly_restyle', null);
-            // this.model.save_changes();
         }
     },
+    create_delta_object: function(data, fullData) {
+        var res = {};
+        for (var p in data) {
+            if (data.hasOwnProperty(p) && p in fullData && fullData[p] !== null)
+                if (data[p] !== fullData[p] || p === 'uid') {  // Let uids through
+                    // property has non-null value in fullData that doesn't match the value in
+                    var full_val = fullData[p];
+                    if (typeof full_val === 'object') {
+                        var full_obj = this.create_delta_object(data[p], full_val);
+                        if (Object.keys(full_obj).length > 0) {
+                            // new object is not empty
+                            res[p] = full_obj;
+                        }
+                    } else {
+                        res[p] = full_val;
+                    }
+                }
+        }
+        return res
+    }
 });
 
 

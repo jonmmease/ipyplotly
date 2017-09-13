@@ -1,5 +1,7 @@
+import uuid
+
 import ipywidgets as widgets
-from traitlets import List, Unicode, Dict, Tuple, default
+from traitlets import List, Unicode, Dict, Tuple, default, observe
 from ipyplotly.basevalidators import CompoundValidator
 
 
@@ -18,6 +20,9 @@ class BaseFigureWidget(widgets.DOMWidget):
     _plotly_addTraces = List(trait=Dict(),
                              allow_none=True).tag(sync=True)
 
+    # JS -> Python message properties
+    _plotly_addTraceDeltas = List(allow_none=True).tag(sync=True)
+
     # Non-sync properties
     traces = Tuple(())
 
@@ -30,6 +35,36 @@ class BaseFigureWidget(widgets.DOMWidget):
     @default('_plotly_restyle')
     def _plotly_restyle_default(self):
         return None
+
+    @observe('_plotly_addTraceDeltas')
+    def handler_plotly_addTraceDeltas(self, change):
+        deltas = change['new']
+        if not deltas:
+            return
+
+        for delta in deltas:
+            uid = delta['uid']
+            uid_traces = [trace for trace in self.traces if trace._data.get('uid', None) == uid]
+            assert len(uid_traces) == 1
+            uid_trace = uid_traces[0]
+            BaseFigureWidget.apply_trace_delta(uid_trace._data, delta)
+
+        # Remove processed trace delta data
+        self._plotly_addTraceDeltas = None
+
+    @staticmethod
+    def apply_trace_delta(trace_data, delta_data):
+        for p, delta_val in delta_data.items():
+            assert p in trace_data
+
+            trace_val = trace_data[p]
+            if isinstance(delta_val, dict):
+                assert isinstance(trace_data, dict)
+
+                BaseFigureWidget.apply_trace_delta(trace_val, delta_val)
+                pass
+            else:
+                trace_data[p] = delta_val
 
     def restyle(self, style, trace_index=None):
         restype_msg = (style, trace_index)
@@ -45,6 +80,9 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     def _add_trace(self, trace):
         # Send to front end
+        if not trace._data.get('uid', None):
+            trace._data['uid'] = str(uuid.uuid1())
+
         add_traces_msg = [trace._data]
         self._plotly_addTraces = add_traces_msg
         self._plotly_addTraces = None
