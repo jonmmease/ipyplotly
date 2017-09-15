@@ -98,25 +98,34 @@ class EnumeratedValidator(BaseValidator):
             v = self.default
 
         elif self.array_ok and DataArrayValidator.is_array(v):
-            invalid_vals = [e for e in v if (not isinstance(e, collections.Hashable)) or (e not in self.values)]
-            if invalid_vals:
-                raise ValueError(('Invalid enumeration element(s) received for {name} '
-                                  'property of {parent_name}: [{csv}]\n'
-                                  '     Valid values are: {valid_vals}').format(
-                    csv=", ".join([repr(v) for v in invalid_vals]),
+            invalid_els = [e for e in v if (not isinstance(e, collections.Hashable)) or (e not in self.values)]
+            if invalid_els:
+                valid_str = '\n'.join(textwrap.wrap(repr(self.values),
+                                                    subsequent_indent=' ' * 8,
+                                                    break_on_hyphens=False))
+
+                raise ValueError(('Invalid enumeration element(s) received for {name} property of {parent_name}.\n'
+                                  '    Invalid elements include: {invalid_els}\n'
+                                  '    Valid values are:\n'
+                                  '        {valid_str}').format(
                     name=self.name,
                     parent_name=self.parent_name,
-                    valid_vals=self.values
+                    invalid_els=invalid_els[:10],
+                    valid_str=valid_str
                 ))
         else:
             if v not in self.values:
+                valid_str = '\n'.join(textwrap.wrap(repr(self.values),
+                                                    subsequent_indent=' ' * 8,
+                                                    break_on_hyphens=False))
                 raise ValueError(
                     ('Invalid enumeration value received for {name} property of {parent_name}: "{v}"\n' +
-                     '    Valid values are: {valid_vals}').format(
+                     '    Valid values are:\n'
+                     '        {valid_str}').format(
                         v=v,
                         name=self.name,
                         parent_name=self.parent_name,
-                        valid_vals=self.values
+                        valid_str=valid_str
                     ))
 
         return v
@@ -349,14 +358,19 @@ class StringValidator(BaseValidator):
             if self.values:
                 invalid_els = [e for e in v if e not in self.values]
                 if invalid_els:
+                    valid_str = '\n'.join(textwrap.wrap(repr(self.values),
+                                                        subsequent_indent=' ' * 8,
+                                                        break_on_hyphens=False))
+
                     raise ValueError(('Invalid string element(s) received for {name} '
                                       'property of {parent_name}\n'
                                       '    Invalid elements include: {invalid}\n'  
-                                      '    Valid values are:         {valid_vals}').format(
+                                      '    Valid values are:\n'
+                                      '        {valid_str}').format(
                         name=self.name,
                         parent_name=self.parent_name,
                         invalid=invalid_els[:10],
-                        valid_vals=self.values
+                        valid_str=valid_str
                     ))
 
         else:
@@ -374,13 +388,17 @@ class StringValidator(BaseValidator):
                                                               v=v))
 
             if self.values and v not in self.values:
+                valid_str = '\n'.join(textwrap.wrap(repr(self.values),
+                                                    subsequent_indent=' ' * 8,
+                                                    break_on_hyphens=False))
                 raise ValueError(
                     ('Invalid string value "{v}" received for {name} property of {parent_name}\n' +
-                     'Valid values are: {valid_vals}').format(
+                     '    Valid values are:\n'
+                     '        {valid_str}').format(
                         v=v,
                         name=self.name,
                         parent_name=self.parent_name,
-                        valid_vals=self.values
+                        valid_str=valid_str
                     ))
 
         return v
@@ -443,7 +461,7 @@ class ColorValidator(BaseValidator):
             else:
                 v = self.default
         elif self.array_ok and DataArrayValidator.is_array(v):
-            invalid_els = [e for e in v if not isinstance(e, str)]
+            invalid_els = [e for e in v if not (isinstance(e, str) or isinstance(e, numbers.Number))]
             if invalid_els:
                 raise ValueError(('All elements of the {name} property of {parent_name} must be strings\n'
                                   '    Invalid elements include: {invalid}').format(name=self.name,
@@ -478,7 +496,10 @@ class ColorValidator(BaseValidator):
         return v
 
     @staticmethod
-    def is_valid_color(v: str):
+    def is_valid_color(v: str, allow_number=True):
+
+        if isinstance(v, numbers.Number) and allow_number:
+            return True
 
         # Remove spaces so regexes don't need to bother with them.
         v = v.replace(' ', '')
@@ -508,18 +529,54 @@ class ColorscaleValidator(BaseValidator):
             ]
         },
     """
+
+    named_colorscales = ['Greys', 'YlGnBu', 'Greens', 'YlOrRd', 'Bluered', 'RdBu', 'Reds', 'Blues', 'Picnic',
+                         'Rainbow', 'Portland', 'Jet', 'Hot', 'Blackbody', 'Earth', 'Electric', 'Viridis']
+
+    valid_colorscale_description = """\
+        Colorscales may be specified as:
+          - A list of 2-element lists where the first element is the normalized color level value 
+            (starting at 0 and ending at 1), and the second item is a valid color string. 
+            (e.g. [[0.5, 'red'], [1.0, 'blue']])
+          - One of the following named colorscales:
+                ['Greys', 'YlGnBu', 'Greens', 'YlOrRd', 'Bluered', 'RdBu', 'Reds', 'Blues', 'Picnic', 
+                 'Rainbow', 'Portland', 'Jet', 'Hot', 'Blackbody', 'Earth', 'Electric', 'Viridis']
+        """
+
     def __init__(self, name, parent_name, dflt=None, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
 
     def validate_coerce(self, v):
+        v_valid = False
+
         if v is None:
             v = self.default
-        elif not isinstance(v, str):
-            raise ValueError(("The {name} property of {parent_name} must be a string. "
-                              "Received value of type {typ}").format(name=self.name,
-                                                                     parent_name=self.parent_name,
-                                                                     typ=type(v)))
+
+        if v is None:
+            v_valid = True
+        elif isinstance(v, str):
+            if v in ColorscaleValidator.named_colorscales:
+                v_valid = True
+
+        elif DataArrayValidator.is_array(v) and len(v) > 0:
+            invalid_els = [e for e in v
+                           if not DataArrayValidator.is_array(e) or
+                           len(e) != 2 or
+                           not isinstance(e[0], numbers.Number) or
+                           not (0 <= e[0] <= 1) or
+                           not isinstance(e[1], str) or
+                           not ColorValidator.is_valid_color(e[1])]
+            if len(invalid_els) == 0:
+                v_valid = True
+
+        if not v_valid:
+            raise ValueError(("The {name} property of {parent_name} must be a valid colorscale.\n"
+                              "    Received value: {v}\n"
+                              "{valid_desc}").format(name=self.name,
+                                                     parent_name=self.parent_name,
+                                                     v=v,
+                                                     valid_desc=ColorscaleValidator.valid_colorscale_description))
         return v
 
 

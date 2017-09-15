@@ -75,8 +75,11 @@ class BaseFigureWidget(widgets.DOMWidget):
         # TODO: update self._traces with new style
 
     def _restyle_child(self, child, prop, val):
+
+        send_val = [val]
+
         trace_index = self.traces.index(child)
-        self.restyle({prop: val}, trace_index=trace_index)
+        self.restyle({prop: send_val}, trace_index=trace_index)
 
     def _add_trace(self, trace):
         # Send to front end
@@ -104,8 +107,7 @@ class BaseTraceType:
 
     def _send_restyle(self, prop, val):
         if self.parent:
-            send_val = [val] if isinstance(val, list) else val
-            self.parent._restyle_child(self, prop, send_val)
+            self.parent._restyle_child(self, prop, val)
 
     def _set_prop(self, prop, val):
         validator = self._validators.get(prop)
