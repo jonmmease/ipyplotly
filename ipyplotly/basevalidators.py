@@ -484,7 +484,7 @@ class ColorValidator(BaseValidator):
                                                                          typ=type(v)))
 
             if not ColorValidator.is_valid_color(v):
-                raise ValueError(("The {name} property of {parent_name} must be a valid colors.\n"
+                raise ValueError(("The {name} property of {parent_name} must be a valid color.\n"
                                   "    Received: {v}\n"
                                   "{vald_clr_desc}\n"
                                   "").format(name=self.name,
