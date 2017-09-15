@@ -362,8 +362,7 @@ class StringValidator(BaseValidator):
                                                         subsequent_indent=' ' * 8,
                                                         break_on_hyphens=False))
 
-                    raise ValueError(('Invalid string element(s) received for {name} '
-                                      'property of {parent_name}\n'
+                    raise ValueError(('Invalid string element(s) received for {name} property of {parent_name}\n'
                                       '    Invalid elements include: {invalid}\n'  
                                       '    Valid values are:\n'
                                       '        {valid_str}').format(
@@ -650,20 +649,72 @@ class FlaglistValidator(BaseValidator):
         super().__init__(name=name, parent_name=parent_name)
         self.flags = flags
         self.default = dflt
-        self.extras = extras
+        self.extras = extras if extras is not None else []
         self.array_ok = array_ok
+
+        self.all_flags = self.flags + self.extras
+
+        if self.extras:
+            extras_line = """\
+      - OR exactly one of {extras} (e.g. '{eg_extra}')""".format(extras=self.extras, eg_extra=self.extras[-1])
+        else:
+            extras_line = ''
+
+        self.valid_description = """\
+    Value must be a string containing:
+      - Any combination of {flags} joined with '+' characters (e.g. '{eg_flag}')
+{extras_line}
+        """.format(flags=self.flags, eg_flag='+'.join(self.flags[:2]), extras_line=extras_line)
+
+    def is_flaglist_valid(self, v):
+        if not isinstance(v, str):
+            return True
+
+        split_vals = v.split('+')
+        all_flags_valid = [f for f in split_vals if f not in self.all_flags] == []
+        has_extras = [f for f in split_vals if f in self.extras] != []
+        return all_flags_valid and (not has_extras or len(split_vals) == 1)
 
     def validate_coerce(self, v):
         if v is None:
             v = self.default
 
-        elif not isinstance(v, str):
-            raise ValueError(("The {name} property of {parent_name} must be a string. "
-                              "Received value of type {typ}").format(name=self.name,
-                                                                     parent_name=self.parent_name,
-                                                                     typ=type(v)))
+        elif self.array_ok and DataArrayValidator.is_array(v):
+            invalid_els = [e for e in v if not isinstance(e, str)]
+            if invalid_els:
+                raise ValueError(('All elements of the {name} property of {parent_name} must be strings\n'
+                                  '    Invalid elements include: {invalid}').format(name=self.name,
+                                                                                    parent_name=self.parent_name,
+                                                                                    invalid=invalid_els[:10]))
 
-        # TODO: validate flag type
+            invalid_els = [e for e in v if not self.is_flaglist_valid(e)]
+            if invalid_els:
+                raise ValueError(('Invalid flaglist element(s) received for {name} property of {parent_name}\n'
+                                  '    Invalid elements include: {invalid}\n'  
+                                  '{valid_desc}').format(
+                    name=self.name,
+                    parent_name=self.parent_name,
+                    invalid=invalid_els[:10],
+                    valid_desc=self.valid_description
+                ))
+
+        else:
+            if not isinstance(v, str):
+                raise ValueError(("The {name} property of {parent_name} must be a string.\n"
+                                  "    Received value of type {typ}").format(name=self.name,
+                                                                             parent_name=self.parent_name,
+                                                                             typ=type(v)))
+
+            if not self.is_flaglist_valid(v):
+                raise ValueError(('Invalid flaglist received for {name} property of {parent_name}\n'
+                                  '    Received value: {v}\n'
+                                  '{valid_desc}').format(
+                    name=self.name,
+                    parent_name=self.parent_name,
+                    v=repr(v),
+                    valid_desc=self.valid_description
+                ))
+
         return v
 
 
