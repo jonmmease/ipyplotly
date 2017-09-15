@@ -91,7 +91,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._plotly_addTraces = None
 
         # Update python side
-        self._traces.append(trace._data)
+        self._traces = self._traces + [trace._data]
         self.traces = self.traces + (trace,)
 
         return trace
