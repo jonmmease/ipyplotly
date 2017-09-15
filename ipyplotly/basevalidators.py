@@ -517,7 +517,6 @@ class ColorValidator(BaseValidator):
             return False
 
 
-
 class ColorscaleValidator(BaseValidator):
     """
         "colorscale": {
