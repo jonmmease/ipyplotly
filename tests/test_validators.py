@@ -292,7 +292,7 @@ def integer_validator_no_dflt():
     return NumberValidator('prop', 'parent')
 
 
-def test_number_validator_no_default(integer_validator_no_dflt: IntegerValidator):
+def test_integer_validator_no_default(integer_validator_no_dflt: IntegerValidator):
     assert integer_validator_no_dflt.default is None
     assert integer_validator_no_dflt.validate_coerce(None) is None
 
@@ -361,6 +361,155 @@ def test_integer_validator_rejection_aok(val, integer_validator_aok: IntegerVali
 
 # String Validator
 # ================
+# Array not ok
+# ------------
+
+# ### Fixtures ###
+@pytest.fixture(params=['foo', 'BAR', ''])
+def string_validator(request):
+    return StringValidator('prop', 'parent', dflt=request.param)
+
+
+# ### Acceptance ###
+@pytest.mark.parametrize('val',
+                         ['bar', 'HELLO!!!', 'world!@#$%^&*()', ''])
+def test_string_validator_acceptance(val, string_validator: StringValidator):
+    assert string_validator.validate_coerce(val) == val
+
+
+# ### Rejection by value ###
+@pytest.mark.parametrize('val',
+                         [(), [], [1, 2, 3], set(), np.nan, np.pi])
+def test_string_validator_rejection(val, string_validator: StringValidator):
+    with pytest.raises(ValueError) as validation_failure:
+        string_validator.validate_coerce(val)
+
+    assert 'must be a string' in str(validation_failure.value)
+
+
+# ### Default ###
+def test_string_validator_default(string_validator: StringValidator):
+    assert string_validator.default is not None
+    assert string_validator.default == string_validator.validate_coerce(None)
+
+
+# ### No default value ###
+@pytest.fixture
+def string_validator_no_dflt():
+    return NumberValidator('prop', 'parent')
+
+
+def test_string_validator_no_default(string_validator_no_dflt: StringValidator):
+    assert string_validator_no_dflt.default is None
+    assert string_validator_no_dflt.validate_coerce(None) is None
+
+
+# Valid values
+# ------------
+@pytest.fixture(params=['foo', 'BAR', ''])
+def string_validator_values(request):
+    return StringValidator('prop', 'parent', dflt=request.param, values=['foo', 'BAR', ''])
+
+
+@pytest.mark.parametrize('val',
+                         ['foo', 'BAR', ''])
+def test_string_validator_acceptance_values(val, string_validator_values: StringValidator):
+    assert string_validator_values.validate_coerce(val) == val
+
+
+@pytest.mark.parametrize('val',
+                         ['FOO', 'bar', 'other', '1234'])
+def test_string_validator_rejection_values(val, string_validator_values: StringValidator):
+    with pytest.raises(ValueError) as validation_failure:
+        string_validator_values.validate_coerce(val)
+
+    assert 'Invalid string value "{val}"'.format(val=val) in str(validation_failure.value)
+
+
+# ### No blanks ###
+@pytest.fixture(params=['foo', 'BAR'])
+def string_validator_no_blanks(request):
+    return StringValidator('prop', 'parent', dflt=request.param, no_blank=True)
+
+
+@pytest.mark.parametrize('val',
+                         ['bar', 'HELLO!!!', 'world!@#$%^&*()'])
+def test_string_validator_acceptance_no_blanks(val, string_validator_no_blanks: StringValidator):
+    assert string_validator_no_blanks.validate_coerce(val) == val
+
+
+@pytest.mark.parametrize('val',
+                         [''])
+def test_string_validator_rejection_no_blanks(val, string_validator_no_blanks: StringValidator):
+    with pytest.raises(ValueError) as validation_failure:
+        string_validator_no_blanks.validate_coerce(val)
+
+    assert 'may not be blank' in str(validation_failure.value)
+
+
+# Array ok
+# --------
+@pytest.fixture
+def string_validator_aok_values(request):
+    return StringValidator('prop', 'parent', values=['foo', 'BAR', '', 'baz'], array_ok=True)
+
+
+@pytest.fixture
+def string_validator_aok(request):
+    return StringValidator('prop', 'parent', array_ok=True)
+
+
+# ### Acceptance ###
+@pytest.mark.parametrize('val',
+                         ['foo', 'BAR', '', 'baz'])
+def test_string_validator_acceptance_aok_scalars(val, string_validator_aok: StringValidator):
+    assert string_validator_aok.validate_coerce(val) == val
+
+
+@pytest.mark.parametrize('val',
+                         [['foo'], ['BAR', ''], ['baz', 'baz', 'baz']])
+def test_string_validator_acceptance_aok_list(val, string_validator_aok: StringValidator):
+    assert string_validator_aok.validate_coerce(val) == val
+
+
+# ### Rejection by type ###
+@pytest.mark.parametrize('val',
+                         [['foo', ()], ['foo', 3, 4], [3, 2, 1]])
+def test_string_validator_rejection_aok(val, string_validator_aok: StringValidator):
+    with pytest.raises(ValueError) as validation_failure:
+        string_validator_aok.validate_coerce(val)
+
+    assert 'must be strings' in str(validation_failure.value)
+
+# ### Rejection by value ###
+@pytest.mark.parametrize('val',
+                         [['foo', 'bar'], ['3', '4'], ['BAR', 'BAR', 'hello!']])
+def test_string_validator_rejection_aok_values(val, string_validator_aok_values: StringValidator):
+    with pytest.raises(ValueError) as validation_failure:
+        string_validator_aok_values.validate_coerce(val)
+
+    assert 'Invalid string element' in str(validation_failure.value)
+
+
+# ### No blanks ###
+@pytest.fixture(params=['foo', 'BAR'])
+def string_validator_no_blanks_aok(request):
+    return StringValidator('prop', 'parent', dflt=request.param, no_blank=True, array_ok=True)
+
+
+@pytest.mark.parametrize('val',
+                         [['bar', 'HELLO!!!'], ['world!@#$%^&*()']])
+def test_string_validator_acceptance_no_blanks_aok(val, string_validator_no_blanks_aok: StringValidator):
+    assert string_validator_no_blanks_aok.validate_coerce(val) == val
+
+
+@pytest.mark.parametrize('val',
+                         ['', ['foo', 'bar', ''], ['']])
+def test_string_validator_rejection_no_blanks_aok(val, string_validator_no_blanks_aok: StringValidator):
+    with pytest.raises(ValueError) as validation_failure:
+        string_validator_no_blanks_aok.validate_coerce(val)
+
+    assert 'may not be blank' in str(validation_failure.value)
 
 
 # DataArrayValidator

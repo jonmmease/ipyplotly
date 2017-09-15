@@ -99,7 +99,7 @@ class EnumeratedValidator(BaseValidator):
             if invalid_vals:
                 raise ValueError(('Invalid enumeration element(s) received for {name} '
                                   'property of {parent_name}: [{csv}]\n'
-                                  'Valid values are: {valid_vals}').format(
+                                  '     Valid values are: {valid_vals}').format(
                     csv=", ".join([repr(v) for v in invalid_vals]),
                     name=self.name,
                     parent_name=self.parent_name,
@@ -109,7 +109,7 @@ class EnumeratedValidator(BaseValidator):
             if v not in self.values:
                 raise ValueError(
                     ('Invalid enumeration value received for {name} property of {parent_name}: "{v}"\n' +
-                     'Valid values are: {valid_vals}').format(
+                     '    Valid values are: {valid_vals}').format(
                         v=v,
                         name=self.name,
                         parent_name=self.parent_name,
@@ -311,11 +311,11 @@ class StringValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=None, noBlank=False, strict=False, array_ok=False, values=None, **_):
+    def __init__(self, name, parent_name, dflt=None, no_blank=False, strict=False, array_ok=False, values=None, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
-        self.no_blank = noBlank
-        self.strict = strict
+        self.no_blank = no_blank
+        self.strict = strict        # Not implemented. We're always strict
         self.array_ok = array_ok
         self.values = values
 
@@ -327,25 +327,48 @@ class StringValidator(BaseValidator):
             else:
                 v = self.default
 
-        elif DataArrayValidator.is_array(v):
-            if not self.array_ok:
-                raise ValueError(('The {name} property of {parent_name} must be a scalar value. '
-                                  'Received value of type "{typ}"'.format(name=self.name,
-                                                                          parent_name=self.parent_name,
-                                                                          typ=type(v))))
-            # Add array element validation
-        else:
-            if not isinstance(v, str):
-                raise ValueError(("The {name} property of {parent_name} must be a string. "
-                                  "Received value of type {typ}").format(name=self.name,
-                                                                         parent_name=self.parent_name,
-                                                                         typ=type(v)))
+        elif self.array_ok and DataArrayValidator.is_array(v):
+            invalid_els = [e for e in v if not isinstance(e, str)]
+            if invalid_els:
+                raise ValueError(('All elements of the {name} property of {parent_name} must be strings\n'
+                                  '    Invalid elements include: {invalid}').format(name=self.name,
+                                                                                    parent_name=self.parent_name,
+                                                                                    invalid=invalid_els[:10]))
 
             if self.no_blank:
-                pass
+                invalid_els = [e for e in v if len(e) == 0]
+                if invalid_els:
+                    raise ValueError(('Elements of the {name} property of {parent_name} may not be blank\n'
+                                      '    Invalid elements include: {invalid}').format(name=self.name,
+                                                                                        parent_name=self.parent_name,
+                                                                                        invalid=invalid_els[:10]))
 
-            if self.strict:
-                pass
+            if self.values:
+                invalid_els = [e for e in v if e not in self.values]
+                if invalid_els:
+                    raise ValueError(('Invalid string element(s) received for {name} '
+                                      'property of {parent_name}\n'
+                                      '    Invalid elements include: {invalid}\n'  
+                                      '    Valid values are:         {valid_vals}').format(
+                        name=self.name,
+                        parent_name=self.parent_name,
+                        invalid=invalid_els[:10],
+                        valid_vals=self.values
+                    ))
+
+        else:
+            if not isinstance(v, str):
+                raise ValueError(("The {name} property of {parent_name} must be a string. \n"
+                                  "    Received value of type {typ}: {v}").format(name=self.name,
+                                                                                  parent_name=self.parent_name,
+                                                                                  typ=type(v),
+                                                                                  v=v))
+
+            if self.no_blank and len(v) == 0:
+                raise ValueError(("The {name} property of {parent_name} may not be blank.\n"
+                                  "    Received: {v}").format(name=self.name,
+                                                              parent_name=self.parent_name,
+                                                              v=v))
 
             if self.values and v not in self.values:
                 raise ValueError(
