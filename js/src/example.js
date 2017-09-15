@@ -30,7 +30,13 @@ var FigureView = widgets.DOMWidgetView.extend({
     render: function() {
 
         // Initialize empty figure
-        Plotly.plot(this.el, this.model.get('_traces'), this.model.get('_layout'));
+        console.log('render');
+
+        // Clone traces and layout so plotly instances in the views don't mutate the model
+        var initial_traces = JSON.parse(JSON.stringify(this.model.get('_traces')));
+        var initial_layout = JSON.parse(JSON.stringify(this.model.get('_layout')));
+        Plotly.plot(this.el, initial_traces, initial_layout);
+        console.log(this.el._fullData);
 
         this.model.on('change:_plotly_addTraces', this.do_addTraces, this);
         this.model.on('change:_plotly_restyle', this.do_restyle, this);
@@ -49,9 +55,13 @@ var FigureView = widgets.DOMWidgetView.extend({
         // add trace to plot
 
         var data = this.model.get('_plotly_addTraces');
+        console.log('do_addTraces');
+
         if (data !== null) {
             var prev_num_traces = this.el._fullData.length;
+            console.log(data);
             Plotly.addTraces(this.el, data);
+            console.log(this.el._fullData);
 
             // Loop over new traces
             var traceDeltas = new Array(data.length);
@@ -67,6 +77,7 @@ var FigureView = widgets.DOMWidgetView.extend({
     },
 
     do_restyle: function () {
+        console.log('do_restyle');
         var data = this.model.get('_plotly_restyle');
         if (data !== null) {
             var style = data[0];
