@@ -1,6 +1,9 @@
 import numbers
 import collections
+import textwrap
+
 import numpy as np
+import re
 # Notes: These become base validator classes, one for each value type. The code-gen validators for primitive types
 # subclass these (hand written) base validator types. compound validators are composed of other compound validators
 # and primitive validators
@@ -56,7 +59,7 @@ class DataArrayValidator(BaseValidator):
                 v = self.default
         else:
             if not DataArrayValidator.is_array(v):
-                raise ValueError(("The {name} property of {parent_name} must be a list. "
+                raise ValueError(("The {name} property of {parent_name} must be array like. "
                                  "Received value of type {typ}").format(name=self.name,
                                                                         parent_name=self.parent_name,
                                                                         typ=type(v)))
@@ -394,6 +397,39 @@ class ColorValidator(BaseValidator):
             ]
         },
     """
+    re_hex = re.compile('#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})')
+    re_rgb_etc = re.compile('(rgb|hsl|hsv)a?\(\d{1,3}%?(,\d{1,3}%?){2,3}\)')
+
+    named_colors = [
+        "aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige", "bisque", "black", "blanchedalmond",
+        "blue", "blueviolet", "brown", "burlywood", "cadetblue", "chartreuse", "chocolate", "coral", "cornflowerblue",
+        "cornsilk", "crimson", "cyan", "darkblue", "darkcyan", "darkgoldenrod", "darkgray", "darkgrey", "darkgreen",
+        "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange", "darkorchid", "darkred", "darksalmon",
+        "darkseagreen", "darkslateblue", "darkslategray", "darkslategrey", "darkturquoise", "darkviolet", "deeppink",
+        "deepskyblue", "dimgray", "dimgrey", "dodgerblue", "firebrick", "floralwhite", "forestgreen", "fuchsia",
+        "gainsboro", "ghostwhite", "gold", "goldenrod", "gray", "grey", "green", "greenyellow", "honeydew", "hotpink",
+        "indianred", "indigo", "ivory", "khaki", "lavender", "lavenderblush", "lawngreen", "lemonchiffon", "lightblue",
+        "lightcoral", "lightcyan", "lightgoldenrodyellow", "lightgray", "lightgrey", "lightgreen", "lightpink",
+        "lightsalmon", "lightseagreen", "lightskyblue", "lightslategray", "lightslategrey", "lightsteelblue",
+        "lightyellow", "lime", "limegreen", "linen", "magenta", "maroon", "mediumaquamarine", "mediumblue",
+        "mediumorchid", "mediumpurple", "mediumseagreen", "mediumslateblue", "mediumspringgreen", "mediumturquoise",
+        "mediumvioletred", "midnightblue", "mintcream", "mistyrose", "moccasin", "navajowhite", "navy", "oldlace",
+        "olive", "olivedrab", "orange", "orangered", "orchid", "palegoldenrod", "palegreen", "paleturquoise",
+        "palevioletred", "papayawhip", "peachpuff", "peru", "pink", "plum", "powderblue", "purple", "red", "rosybrown",
+        "royalblue", "saddlebrown", "salmon", "sandybrown", "seagreen", "seashell", "sienna", "silver", "skyblue",
+        "slateblue", "slategray", "slategrey", "snow", "springgreen", "steelblue", "tan", "teal", "thistle", "tomato",
+        "turquoise", "violet", "wheat", "white", "whitesmoke", "yellow", "yellowgreen"]
+
+    valid_color_description = """\
+    Colors may be specified as:
+      - Hex strings (e.g. '#ff0000')
+      - rgb/rgba strings (e.g. 'rgb(255, 0, 0)')
+      - hsl/hsla strings (e.g. 'hsl(0, 100%, 50%)')
+      - hsv/hsva strings (e.g. 'hsv(0, 100%, 100%)')
+      - Named CSS colors: 
+            {clrs} 
+    """.format(clrs='\n'.join(textwrap.wrap(', '.join(named_colors), width=80, subsequent_indent=' ' * 12)))
+
     def __init__(self, name, parent_name, dflt=None, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
@@ -401,16 +437,65 @@ class ColorValidator(BaseValidator):
 
     def validate_coerce(self, v):
         if v is None:
-            v = self.default
+            if self.default is NoDefault:
+                raise ValueError(('The {name} property of {parent_name} has no default value '
+                                  'and may not be set to None.'.format(name=self.name, parent_name=self.parent_name)))
+            else:
+                v = self.default
+        elif self.array_ok and DataArrayValidator.is_array(v):
+            invalid_els = [e for e in v if not isinstance(e, str)]
+            if invalid_els:
+                raise ValueError(('All elements of the {name} property of {parent_name} must be strings\n'
+                                  '    Invalid elements include: {invalid}').format(name=self.name,
+                                                                                    parent_name=self.parent_name,
+                                                                                    invalid=invalid_els[:10]))
 
-        elif not isinstance(v, str):
-            raise ValueError(("The {name} property of {parent_name} must be a string. "
-                              "Received value of type {typ}").format(name=self.name,
-                                                                     parent_name=self.parent_name,
-                                                                     typ=type(v)))
+            invalid_els = [c for c in v if not ColorValidator.is_valid_color(c)]
+            if invalid_els:
+                raise ValueError(('All elements of the {name} property of {parent_name} must be valid colors\n'
+                                  '    Invalid elements include: {invalid}\n'
+                                  '{vald_clr_desc}').format(name=self.name,
+                                                            parent_name=self.parent_name,
+                                                            invalid=invalid_els[:10],
+                                                            vald_clr_desc=ColorValidator.valid_color_description))
 
-        # TODO: validate color types
+        else:
+            if not isinstance(v, str):
+                raise ValueError(("The {name} property of {parent_name} must be a string.\n"
+                                  "    Received value of type {typ}").format(name=self.name,
+                                                                         parent_name=self.parent_name,
+                                                                         typ=type(v)))
+
+            if not ColorValidator.is_valid_color(v):
+                raise ValueError(("The {name} property of {parent_name} must be a valid colors.\n"
+                                  "    Received: {v}\n"
+                                  "{vald_clr_desc}\n"
+                                  "").format(name=self.name,
+                                             parent_name=self.parent_name,
+                                             v=v,
+                                             vald_clr_desc=ColorValidator.valid_color_description))
+
         return v
+
+    @staticmethod
+    def is_valid_color(v: str):
+
+        # Remove spaces so regexes don't need to bother with them.
+        v = v.replace(' ', '')
+
+        if ColorValidator.re_hex.fullmatch(v):
+            # valid hex color (e.g. #f34ab3)
+            return True
+        elif ColorValidator.re_rgb_etc.fullmatch(v):
+            # Valid rgb(a), hsl(a), hsv(a) color (e.g. rgba(10, 234, 200, 50%)
+            return True
+        elif v in ColorValidator.named_colors:
+            # Valid named color (e.g. 'coral')
+            return True
+        else:
+            # Not a valid color
+            return False
+
 
 
 class ColorscaleValidator(BaseValidator):

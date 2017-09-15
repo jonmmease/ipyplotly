@@ -3,6 +3,7 @@ import os.path as opath
 import shutil
 from io import StringIO
 from codegen.utils import TraceNode, format_source
+import textwrap
 
 def build_validators_py(parent_node: TraceNode):
     buffer = StringIO()

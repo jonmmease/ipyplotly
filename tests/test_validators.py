@@ -481,6 +481,7 @@ def test_string_validator_rejection_aok(val, string_validator_aok: StringValidat
 
     assert 'must be strings' in str(validation_failure.value)
 
+
 # ### Rejection by value ###
 @pytest.mark.parametrize('val',
                          [['foo', 'bar'], ['3', '4'], ['BAR', 'BAR', 'hello!']])
@@ -512,14 +513,73 @@ def test_string_validator_rejection_no_blanks_aok(val, string_validator_no_blank
     assert 'may not be blank' in str(validation_failure.value)
 
 
+# ColorValidator
+# ==============
+# Array not ok
+# ------------
+
+# ### Fixtures ###
+@pytest.fixture(params=['green', 'rgb(255, 0, 0)'])
+def color_validator(request):
+    return ColorValidator('prop', 'parent', dflt=request.param)
+
+
+# ### Acceptance ###
+@pytest.mark.parametrize('val',
+                         ['red', 'rgb(255, 0, 0)', 'hsl(0, 100%, 50%)', 'hsla(0, 100%, 50%, 100%)',
+                          'hsv(0, 100%, 100%)', 'hsva(0, 100%, 100%, 50%)'])
+def test_color_validator_acceptance(val, color_validator: StringValidator):
+    assert color_validator.validate_coerce(val) == val
+
+
+# ### Rejection by value ###
+@pytest.mark.parametrize('val',
+                         ['redd', 'rgbbb(255, 0, 0)', 'hsl(0, 10000%, 50%)'])
+def test_color_validator_rejection(val, color_validator: StringValidator):
+    with pytest.raises(ValueError) as validation_failure:
+        color_validator.validate_coerce(val)
+
+    assert 'must be a valid color' in str(validation_failure.value)
+
+
+# Array ok
+# --------
+@pytest.fixture(params=['green', 'rgb(255, 0, 0)'])
+def color_validator_aok(request):
+    return ColorValidator('prop', 'parent', dflt=request.param, array_ok=True)
+
+
+# ### Acceptance ###
+@pytest.mark.parametrize('val',
+                         [['red', 'rgb(255, 0, 0)'],
+                          ['hsl(0, 100%, 50%)', 'hsla(0, 100%, 50%, 100%)', 'hsv(0, 100%, 100%)'],
+                          ['hsva(0, 100%, 100%, 50%)']])
+def test_color_validator_acceptance(val, color_validator_aok: StringValidator):
+    assert color_validator_aok.validate_coerce(val) == val
+
+
+# ### Rejection ###
+@pytest.mark.parametrize('val',
+                         [['redd', 'rgb(255, 0, 0)'],
+                          ['hsl(0, 100%, 5000%)', 'hsla(0, 100%, 50%, 100%)', 'hsv(0, 100%, 100%)'],
+                          ['hsva(0, 1%00%, 100%, 50%)']])
+def test_color_validator_acceptance(val, color_validator_aok: StringValidator):
+    with pytest.raises(ValueError) as validation_failure:
+        color_validator_aok.validate_coerce(val)
+
+    assert 'must be valid colors' in str(validation_failure.value)
+
+
+
+# FlaglistValidator
+# =================
+
+
 # DataArrayValidator
 # ==================
 
 
-# ColorValidator
-# ==============
-#  - Validate with regular expressions
-#  - Add matlab single letter colors
+
 
 
 # ColorscaleValidator
@@ -532,10 +592,6 @@ def test_string_validator_rejection_no_blanks_aok(val, string_validator_no_blank
 
 # SubplotidValidator
 # ==================
-
-
-# FlaglistValidator
-# =================
 
 
 # AnyValidator
