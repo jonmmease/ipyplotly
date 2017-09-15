@@ -1,6 +1,6 @@
 import numbers
 import collections
-
+import numpy as np
 # Notes: These become base validator classes, one for each value type. The code-gen validators for primitive types
 # subclass these (hand written) base validator types. compound validators are composed of other compound validators
 # and primitive validators
@@ -81,9 +81,11 @@ class EnumeratedValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, values, dflt=None, array_ok=False, coerceNumber=False, **_):
+    def __init__(self, name, parent_name, values, dflt=None, array_ok=False, coerce_number=False, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.coerce_number = coerceNumber
+
+        # coerce_number is rarely used and not implemented
+        self.coerce_number = coerce_number
         self.default = dflt
         self.values = values
         self.array_ok = array_ok
@@ -92,13 +94,7 @@ class EnumeratedValidator(BaseValidator):
         if v is None:
             v = self.default
 
-        elif DataArrayValidator.is_array(v):
-            if not self.array_ok:
-                raise ValueError(('The {name} property of {parent_name} must be a scalar value. '
-                                  'Received value of type "{typ}"'.format(name=self.name,
-                                                                          parent_name=self.parent_name,
-                                                                          typ=type(v))))
-
+        elif self.array_ok and DataArrayValidator.is_array(v):
             invalid_vals = [e for e in v if (not isinstance(e, collections.Hashable)) or (e not in self.values)]
             if invalid_vals:
                 raise ValueError(('Invalid enumeration element(s) received for {name} '
@@ -143,9 +139,10 @@ class BooleanValidator(BaseValidator):
 
         elif not isinstance(v, bool):
             raise ValueError(("The {name} property of {parent_name} must be a bool. "
-                              "Received value of type {typ}").format(name=self.name,
-                                                                     parent_name=self.parent_name,
-                                                                     typ=type(v)))
+                              "Received value of type {typ}: {v}").format(name=self.name,
+                                                                          parent_name=self.parent_name,
+                                                                          typ=type(v),
+                                                                          v=repr(v)))
         return v
 
 
@@ -171,30 +168,50 @@ class NumberValidator(BaseValidator):
 
     def validate_coerce(self, v):
         if v is None:
-            if self.default is NoDefault:
-                raise ValueError(('The {name} property of {parent_name} has no default value '
-                                  'and may not be set to None.'.format(name=self.name, parent_name=self.parent_name)))
-            else:
-                v = self.default
+            v = self.default
 
-        elif DataArrayValidator.is_array(v):
-            if not self.array_ok:
-                raise ValueError(('The {name} property of {parent_name} must be a scalar value. '
-                                  'Received value of type "{typ}"'.format(name=self.name,
+        elif self.array_ok and DataArrayValidator.is_array(v):
+
+            try:
+                v_array = np.array(v, dtype='float64')
+            except (ValueError, TypeError, OverflowError) as ve:
+                raise ValueError(('All elements of the {name} property of {parent_name} must be numbers.\n'
+                                  '    Error: {msg}').format(name=self.name,
+                                                          parent_name=self.parent_name,
+                                                          msg=ve.args[0]))
+            v_valid = np.ones(v_array.shape, dtype='bool')
+            if self.min_val is not None:
+                v_valid = np.logical_and(v_valid, v_array >= self.min_val)
+
+            if self.max_val is not None:
+                v_valid = np.logical_and(v_valid, v_array <= self.max_val)
+
+            if not np.all(v_valid):
+                invalid_els = np.array(v, dtype='object')[np.logical_not(v_valid)][:10].tolist()
+                raise ValueError(("All elements of the {name} property of {parent_name} must be in the range "
+                                  "[{min_val}, {max_val}]. \n"
+                                  "    Invalid elements include: {v}").format(name=self.name,
                                                                           parent_name=self.parent_name,
-                                                                          typ=type(v))))
-            # Add array element validation
+                                                                          min_val=self.min_val,
+                                                                          max_val=self.max_val,
+                                                                          v=invalid_els))
+
+            v = v_array.tolist()
         else:
             if not isinstance(v, numbers.Number):
                 raise ValueError(("The {name} property of {parent_name} must be a number. "
-                                  "Received value of type {typ}").format(name=self.name,
-                                                                         parent_name=self.parent_name,
-                                                                         typ=type(v)))
-            if self.min_val is not None and v < self.min_val:
-                v = self.default
-
-            if self.max_val is not None and v > self.max_val:
-                v = self.default
+                                  "Received value of type {typ}: {v}").format(name=self.name,
+                                                                              parent_name=self.parent_name,
+                                                                              typ=type(v),
+                                                                              v=repr(v)))
+            if (self.min_val is not None and not v >= self.min_val) or \
+                    (self.max_val is not None and not v <= self.max_val):
+                raise ValueError(("The {name} property of {parent_name} must be in the range "
+                                  "[{min_val}, {max_val}]. Received: {v}").format(name=self.name,
+                                                                                  parent_name=self.parent_name,
+                                                                                  min_val=self.min_val,
+                                                                                  max_val=self.max_val,
+                                                                                  v=repr(v)))
 
         return v
 
@@ -214,34 +231,68 @@ class IntegerValidator(BaseValidator):
     """
     def __init__(self, name, parent_name, dflt=None, min=None, max=None, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = dflt
-        self.min_val = min
-        self.max_val = max
+        self.default = int(dflt) if dflt is not None else None
+        self.min_val = int(min) if min is not None else None
+        self.max_val = int(max) if max is not None else None
         self.array_ok = array_ok
 
     def validate_coerce(self, v):
         if v is None:
             v = self.default
 
-        elif DataArrayValidator.is_array(v):
-            if not self.array_ok:
-                raise ValueError(('The {name} property of {parent_name} must be a scalar value. '
-                                  'Received value of type "{typ}"'.format(name=self.name,
+        elif self.array_ok and DataArrayValidator.is_array(v):
+
+            try:
+                v_array = np.array(v, dtype='int64')
+            except (ValueError, TypeError, OverflowError) as ve:
+                raise ValueError(('All elements of the {name} property of {parent_name} must be '
+                                  'convertible to integers.\n'
+                                  '    Error: {msg}').format(name=self.name,
+                                                          parent_name=self.parent_name,
+                                                          msg=ve.args[0]))
+
+            v_valid = np.ones(v_array.shape, dtype='bool')
+            if self.min_val is not None:
+                v_valid = np.logical_and(v_valid, v_array >= self.min_val)
+
+            if self.max_val is not None:
+                v_valid = np.logical_and(v_valid, v_array <= self.max_val)
+
+            if not np.all(v_valid):
+                invalid_els = np.array(v, dtype='object')[np.logical_not(v_valid)][:10].tolist()
+                raise ValueError(("All elements of the {name} property of {parent_name} must be in the range "
+                                  "[{min_val}, {max_val}]. \n"
+                                  "    Invalid elements include: {v}").format(name=self.name,
                                                                           parent_name=self.parent_name,
-                                                                          typ=type(v))))
-            # Add array element validation
+                                                                          min_val=self.min_val,
+                                                                          max_val=self.max_val,
+                                                                          v=invalid_els))
+
+            v = v_array.tolist()
         else:
-            if not isinstance(v, int):
-                raise ValueError(("The {name} property of {parent_name} must be an integer. "
-                                  "Received value of type {typ}").format(name=self.name,
-                                                                         parent_name=self.parent_name,
-                                                                         typ=type(v)))
+            try:
+                if not isinstance(v, numbers.Number):
+                    # don't let int() cast strings to ints
+                    raise ValueError('')
 
-            if self.min_val is not None and v < self.min_val:
-                v = self.default
+                v_int = int(v)
+            except (ValueError, TypeError, OverflowError) as ve:
+                raise ValueError(("The {name} property of {parent_name} must be a number that can be converted "
+                                  "to an integer.\n"
+                                  "    Received value of type {typ}: {v}").format(name=self.name,
+                                                                                  parent_name=self.parent_name,
+                                                                                  typ=type(v),
+                                                                                  v=repr(v)))
 
-            if self.max_val is not None and v > self.max_val:
-                v = self.default
+            if (self.min_val is not None and not v >= self.min_val) or \
+                    (self.max_val is not None and not v <= self.max_val):
+                raise ValueError(("The {name} property of {parent_name} must be in the range "
+                                  "[{min_val}, {max_val}]. Received: {v}").format(name=self.name,
+                                                                                  parent_name=self.parent_name,
+                                                                                  min_val=self.min_val,
+                                                                                  max_val=self.max_val,
+                                                                                  v=repr(v)))
+            v = v_int
 
         return v
 
