@@ -12,8 +12,8 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         _model_module: 'ipyplotly',
         _view_module: 'ipyplotly',
 
-        _traces: [],
-        _layout: {},
+        _traces_data: [],
+        _layout_data: {},
 
         // Message properties
         _plotly_addTraces: null,
@@ -38,9 +38,11 @@ var FigureView = widgets.DOMWidgetView.extend({
         console.log('render');
 
         // Clone traces and layout so plotly instances in the views don't mutate the model
-        var initial_traces = JSON.parse(JSON.stringify(this.model.get('_traces')));
-        var initial_layout = JSON.parse(JSON.stringify(this.model.get('_layout')));
+        var initial_traces = JSON.parse(JSON.stringify(this.model.get('_traces_data')));
+        var initial_layout = JSON.parse(JSON.stringify(this.model.get('_layout_data')));
         Plotly.plot(this.el, initial_traces, initial_layout);
+
+        // Plotly.plot(this.el, this.model.get('_traces_data'), this.model.get('_layout_data'));
         console.log(this.el._fullData);
 
         // Python -> JS event properties
@@ -69,9 +71,9 @@ var FigureView = widgets.DOMWidgetView.extend({
 
         if (data !== null) {
             var prev_num_traces = this.el._fullData.length;
-            console.log(data);
+            // console.log(data);
             Plotly.addTraces(this.el, data);
-            console.log(this.el._fullData);
+            // console.log(this.el._fullData);
 
             // Loop over new traces
             var traceDeltas = new Array(data.length);

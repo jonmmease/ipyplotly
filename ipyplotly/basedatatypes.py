@@ -8,14 +8,19 @@ from ipyplotly.basevalidators import CompoundValidator
 
 @widgets.register
 class BaseFigureWidget(widgets.DOMWidget):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Initialize backing property for trace objects
+        self._traces = ()
+
     _view_name = Unicode('FigureView').tag(sync=True)
     _view_module = Unicode('ipyplotly').tag(sync=True)
     _model_name = Unicode('FigureModel').tag(sync=True)
     _model_module = Unicode('ipyplotly').tag(sync=True)
 
     # Data properties for front end
-    _layout = Dict().tag(sync=True)
-    _traces = List().tag(sync=True)
+    _layout_data = Dict().tag(sync=True)
+    _traces_data = List().tag(sync=True)
 
     # Python -> JS message properties
     _plotly_addTraces = List(trait=Dict(),
@@ -30,7 +35,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     _plotly_restylePython = List(allow_none=True).tag(sync=True)
 
     # Non-sync properties
-    traces = Tuple(())
+    traces = Tuple(allow_none=True)
 
     @default('_plotly_addTraces')
     def _plotly_addTraces_default(self):
@@ -56,6 +61,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         # Remove processed trace delta data
         self._plotly_addTraceDeltas = None
 
+
     @observe('_plotly_restylePython')
     def handler_plotly_restylePython(self, change):
         restyle_msg = change['new']
@@ -70,17 +76,20 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         self.restyle(restyle_data, trace_inds)
 
-    @validate('traces')
-    def handle_traces_update(self, proposal):
-        new_traces = proposal['value']
+    @property
+    def traces(self):
+        return self._traces
+
+    @traces.setter
+    def traces(self, new_traces):
 
         # Validate new_traces
-        orig_uids = [_trace['uid'] for _trace in self._traces]
+        orig_uids = [_trace['uid'] for _trace in self._traces_data]
         new_uids = [trace.uid for trace in new_traces]
 
         invalid_uids = set(new_uids).difference(set(orig_uids))
         if invalid_uids:
-            raise TraitError(('The trace property of a figure may only be assigned to '
+            raise ValueError(('The trace property of a figure may only be assigned to '
                               'a permutation of a subset of itself\n'
                               '    Invalid trace(s) with uid(s): {invalid_uids}').format(invalid_uids=invalid_uids))
 
@@ -88,7 +97,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         uid_counter = collections.Counter(new_uids)
         duplicate_uids = [uid for uid, count in uid_counter.items() if count > 1]
         if duplicate_uids:
-            raise TraitError(('The trace property of a figure may not be assigned '
+            raise ValueError(('The trace property of a figure may not be assigned '
                               'multiple copies of a trace\n'
                               '    Duplicate trace uid(s): {duplicate_uids}'
                               ).format(duplicate_uids=duplicate_uids))
@@ -96,7 +105,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         # Compute traces to remove
         remove_uids = set(orig_uids).difference(set(new_uids))
         remove_inds = []
-        for i, _trace in enumerate(self._traces):
+        for i, _trace in enumerate(self._traces_data):
             if _trace['uid'] in remove_uids:
                 remove_inds.append(i)
 
@@ -104,7 +113,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                 self.traces[i].parent = None
 
         # Compute trace data list after removal
-        traces_data_post_removal = [t for t in self._traces]
+        traces_data_post_removal = [t for t in self._traces_data]
         for i in reversed(remove_inds):
             del traces_data_post_removal[i]
 
@@ -124,9 +133,9 @@ class BaseFigureWidget(widgets.DOMWidget):
             self._plotly_moveTraces = [current_inds, new_inds]
 
         # Update _traces order
-        self._traces = [_trace for i, _trace in sorted(zip(new_inds, traces_data_post_removal))]
+        self._traces_data = [_trace for i, _trace in sorted(zip(new_inds, traces_data_post_removal))]
 
-        return new_traces
+        self._traces = new_traces
 
     @staticmethod
     def apply_trace_delta(trace_data, delta_data):
@@ -237,7 +246,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                 restyle_msg_vs = []
                 any_vals_changed = False
                 for i, trace_ind in enumerate(trace_indexes):
-                    trace_data = self._traces[trace_ind]
+                    trace_data = self._traces_data[trace_ind]
                     for path_el in path:
                         trace_data = trace_data[path_el]
                     trace_v = v[i % len(v)]
@@ -280,7 +289,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             trace._data['uid'] = str(uuid.uuid1())
 
         # Update python side
-        self._traces = self._traces + [trace._data]
+        self._traces_data = self._traces_data + [trace._data]
         self.traces = self.traces + (trace,)
 
         # Send to front end
