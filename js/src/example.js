@@ -83,7 +83,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             var style = data[0];
             var idx = data[1];
 
-            var fullDataPre = this.clone_fullData(this.el._fullData[idx]);
+            var fullDataPre = this.clone_fullData_metadata(this.el._fullData[idx]);
             Plotly.restyle(this.el, style, idx);
 
             var traceDelta = this.create_delta_object(fullDataPre, this.el._fullData[idx]);
@@ -93,9 +93,12 @@ var FigureView = widgets.DOMWidgetView.extend({
         }
     },
 
-    clone_fullData: function (fullData) {
+    clone_fullData_metadata: function (fullData) {
         var fullStr = JSON.stringify(fullData, function(k, v) {
             if (k.length > 0 && k[0] === '_') {
+                return undefined
+            } else if (Array.isArray(v)) {
+                // For performance, we don't clone arrays
                 return undefined
             }
             return v

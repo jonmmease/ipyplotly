@@ -106,6 +106,7 @@ class BaseTraceType:
         self.parent = None
 
     def _send_restyle(self, prop, val):
+        print('%s: _send_restyle' % self.type_name)
         if self.parent:
             self.parent._restyle_child(self, prop, val)
 
