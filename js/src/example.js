@@ -82,13 +82,27 @@ var FigureView = widgets.DOMWidgetView.extend({
         if (data !== null) {
             var style = data[0];
             var idx = data[1];
-            if (idx !== null) {
-                Plotly.restyle(this.el, style, idx);
-            } else {
-                Plotly.restyle(this.el, style);
-            }
+
+            var fullDataPre = this.clone_fullData(this.el._fullData[idx]);
+            Plotly.restyle(this.el, style, idx);
+
+            var traceDelta = this.create_delta_object(fullDataPre, this.el._fullData[idx]);
+
+            this.model.set('_plotly_addTraceDeltas', [traceDelta]);
+            this.touch();
         }
     },
+
+    clone_fullData: function (fullData) {
+        var fullStr = JSON.stringify(fullData, function(k, v) {
+            if (k.length > 0 && k[0] === '_') {
+                return undefined
+            }
+            return v
+        });
+        return JSON.parse(fullStr)
+    },
+
     create_delta_object: function(data, fullData) {
         var res = {};
         for (var p in data) {
