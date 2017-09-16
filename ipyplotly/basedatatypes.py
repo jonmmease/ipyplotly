@@ -27,6 +27,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # JS -> Python message properties
     _plotly_addTraceDeltas = List(allow_none=True).tag(sync=True)
+    _plotly_restylePython = List(allow_none=True).tag(sync=True)
 
     # Non-sync properties
     traces = Tuple(())
@@ -54,6 +55,20 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         # Remove processed trace delta data
         self._plotly_addTraceDeltas = None
+
+    @observe('_plotly_restylePython')
+    def handler_plotly_restylePython(self, change):
+        restyle_msg = change['new']
+        if not restyle_msg:
+            return
+
+        restyle_data = restyle_msg[0]
+        if len(restyle_msg) > 1 and restyle_msg[1] is not None:
+            trace_inds = restyle_msg[1]
+        else:
+            trace_inds = None
+
+        self.restyle(restyle_data, trace_inds)
 
     @validate('traces')
     def handle_traces_update(self, proposal):
@@ -127,20 +142,136 @@ class BaseFigureWidget(widgets.DOMWidget):
             else:
                 trace_data[p] = delta_val
 
-    def restyle(self, style, trace_index=None):
-        restype_msg = (style, trace_index)
-        print('Restyle: {msg}'.format(msg=restype_msg))
+    @staticmethod
+    def _normalize_restyle_data(restyle_data: dict):
+        """
+        E.g.
+
+        {'a.foo.bar': 3, 'a.foo.baz': ['hello!', 'world!']} ->
+            {'a': {'foo': {'bar': [3], 'baz': ['hello!', 'world!']}}}
+
+        Parameters
+        ----------
+        restyle_data :
+
+        Returns
+        -------
+
+        """
+        res = {}
+        to_merge = []
+        for k, v in restyle_data.items():
+            assert isinstance(k, str)
+
+            if not isinstance(v, list):
+                v = [v]
+
+            # Check for keys with periods
+            #  e.g. marker.color.
+            outer_name, *rest_names_list = k.split('.')
+            if rest_names_list:
+                k2 = outer_name
+                v2 = {'.'.join(rest_names_list): v}
+            else:
+                k2 = k
+                # Make sure v2 is a list
+                if isinstance(v, list):
+                    v2 = v
+                else:
+                    v2 = [v]
+
+            if isinstance(v2, dict):
+                v3 = BaseFigureWidget._normalize_restyle_data(v2)
+                to_merge.append({k2: v3})
+            else:
+                res[k2] = v2
+
+        # Merge dictionary properties
+        for d in to_merge:
+            BaseFigureWidget._merge_restyle_data(res, d)
+
+        return res
+
+    @staticmethod
+    def _merge_restyle_data(to_data, from_data, path=None):
+        if path is None:
+            path = []
+
+        for k in from_data:
+            if k in to_data:
+                if isinstance(to_data[k], dict) and isinstance(from_data[k], dict):
+                    BaseFigureWidget._merge_restyle_data(to_data[k], from_data[k], path + [k])
+                elif to_data[k] == from_data[k]:
+                    pass  # Same values at leaf
+                else:
+                    raise ValueError('Style dictionaries conflict at {path}'.format(path=path + [k]))
+            else:
+                to_data[k] = from_data[k]
+
+        return to_data
+
+    def restyle(self, style, trace_indexes=None):
+        if trace_indexes is None:
+            trace_indexes = list(range(len(self.traces)))
+
+        if not isinstance(trace_indexes, (list, tuple)):
+            trace_indexes = [trace_indexes]
+
+        style2 = BaseFigureWidget._normalize_restyle_data(style)
+        restyle_msg = self._perform_restyle(style2, trace_indexes)
+        if restyle_msg:
+            self._send_restyle_msg(restyle_msg, trace_indexes=trace_indexes)
+
+    def _perform_restyle(self, style, trace_indexes, path=None):
+        """ This should perform the restyle but it won't trigger
+        Need to return a restyle message"""
+        if path is None:
+            path = []
+
+        restyle_msgs = []
+        for k, v in style.items():
+            if isinstance(v, dict):
+                msg = self._perform_restyle(v, trace_indexes, path + [k])
+                restyle_msgs.append(msg)
+            else:
+                restyle_msg_vs = []
+                any_vals_changed = False
+                for i, trace_ind in enumerate(trace_indexes):
+                    trace_data = self._traces[trace_ind]
+                    for path_el in path:
+                        trace_data = trace_data[path_el]
+                    trace_v = v[i % len(v)]
+                    restyle_msg_vs.append(trace_v)
+
+                    if k not in trace_data or trace_data[k] != trace_v:
+                        trace_data[k] = trace_v
+                        any_vals_changed = True
+
+                if any_vals_changed:
+                    # At lease on of the values for one of the traces has changed. Update them all
+                    restyle_msgs.append({'.'.join(path + [k]): restyle_msg_vs})
+
+        restyle_data = {}
+        for restyle_msg in restyle_msgs:
+            self._merge_restyle_data(restyle_data, restyle_msg)
+
+        return restyle_data
+
+    def _send_restyle_msg(self, style, trace_indexes=None):
+        if not isinstance(trace_indexes, (list, tuple)):
+            trace_indexes = [trace_indexes]
+
+        restype_msg = (style, trace_indexes)
+        # print('Restyle: {msg}'.format(msg=restype_msg))
         self._plotly_restyle = restype_msg
         self._plotly_restyle = None
-
-        # TODO: update self._traces with new style
 
     def _restyle_child(self, child, prop, val):
 
         send_val = [val]
 
         trace_index = self.traces.index(child)
-        self.restyle({prop: send_val}, trace_index=trace_index)
+        self._send_restyle_msg({prop: send_val}, trace_indexes=trace_index)
 
     def _add_trace(self, trace):
 

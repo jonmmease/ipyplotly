@@ -20,7 +20,10 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         _plotly_deleteTraces: null,
         _plotly_moveTraces: null,
         _plotly_restyle: null,
-        _plotly_addTraceDeltas: []
+
+        // JS -> Python
+        _plotly_addTraceDeltas: [],
+        _plotly_restylePython: []
     })
 });
 
@@ -47,13 +50,15 @@ var FigureView = widgets.DOMWidgetView.extend({
         this.model.on('change:_plotly_restyle', this.do_restyle, this);
 
         // Plotly events
-        this.el.on('plotly_restyle', this.handle_restyle, this);
+        var that = this;
+        this.el.on('plotly_restyle', function(update, inds) {that.handle_restyle(update, inds)});
     },
 
-    handle_restyle: function (update, inds) {
+    handle_restyle: function (data) {
         console.log("plotly_restyle");
-        console.log(update);
-        console.log(inds);
+        console.log(data);
+        this.model.set('_plotly_restylePython', data);
+        this.touch();
     },
 
     do_addTraces: function () {
@@ -115,12 +120,27 @@ var FigureView = widgets.DOMWidgetView.extend({
             var style = data[0];
             var idx = data[1];
 
-            var fullDataPre = this.clone_fullData_metadata(this.el._fullData[idx]);
+            if (idx === null || idx === undefined) {
+                idx = Array.apply(null, Array(self.el.data.length)).map(function (_, i) {return i;});
+            }
+            if (!Array.isArray(idx)) {
+                // Make sure idx is an array
+                idx = [idx];
+            }
+
+            var fullDataPres = Array(idx.length);
+            for (var i = 0; i < idx.length; i++) {
+                fullDataPres[i] = this.clone_fullData_metadata(this.el._fullData[idx[i]]);
+            }
+
             Plotly.restyle(this.el, style, idx);
 
-            var traceDelta = this.create_delta_object(fullDataPre, this.el._fullData[idx]);
+            var traceDeltas = Array(idx.length);
+            for (i = 0; i < idx.length; i++) {
+                traceDeltas[i] = this.create_delta_object(fullDataPres[i], this.el._fullData[idx[i]]);
+            }
 
-            this.model.set('_plotly_addTraceDeltas', [traceDelta]);
+            this.model.set('_plotly_addTraceDeltas', traceDeltas);
             this.touch();
         }
     },
