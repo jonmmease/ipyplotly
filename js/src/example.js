@@ -17,6 +17,8 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
         // Message properties
         _plotly_addTraces: null,
+        _plotly_deleteTraces: null,
+        _plotly_moveTraces: null,
         _plotly_restyle: null,
         _plotly_addTraceDeltas: []
     })
@@ -38,7 +40,10 @@ var FigureView = widgets.DOMWidgetView.extend({
         Plotly.plot(this.el, initial_traces, initial_layout);
         console.log(this.el._fullData);
 
+        // Python -> JS event properties
         this.model.on('change:_plotly_addTraces', this.do_addTraces, this);
+        this.model.on('change:_plotly_deleteTraces', this.do_deleteTraces, this);
+        this.model.on('change:_plotly_moveTraces', this.do_moveTraces, this);
         this.model.on('change:_plotly_restyle', this.do_restyle, this);
 
         // Plotly events
@@ -73,6 +78,33 @@ var FigureView = widgets.DOMWidgetView.extend({
 
             this.model.set('_plotly_addTraceDeltas', traceDeltas);
             this.touch();
+        }
+    },
+
+    do_deleteTraces: function () {
+        var delete_inds = this.model.get('_plotly_deleteTraces');
+        console.log('do_deleteTraces');
+        if (delete_inds !== null){
+            console.log(delete_inds);
+            Plotly.deleteTraces(this.el, delete_inds)
+        }
+    },
+
+    do_moveTraces: function () {
+        var move_data = this.model.get('_plotly_moveTraces');
+        console.log('do_moveTraces');
+
+        if (move_data !== null){
+            var current_inds = move_data[0];
+            var new_inds = move_data[1];
+
+            var inds_equal = current_inds.length===new_inds.length &&
+                current_inds.every(function(v,i) { return v === new_inds[i]});
+
+            if (!inds_equal) {
+                console.log(current_inds + "->" + new_inds);
+                Plotly.moveTraces(this.el, current_inds, new_inds);
+            }
         }
     },
 
