@@ -5,6 +5,16 @@ import ipywidgets as widgets
 from traitlets import List, Unicode, Dict, Tuple, default, observe, validate, TraitError
 from ipyplotly.basevalidators import CompoundValidator
 
+"""
+Next steps:
+
+    - Don't sync _layout_data and _traces_data
+    - JS model keeps a stack of plotly commands, not layout/traces data itself
+    - JS Model listens for commands and adds them to the stack
+    - JS Views listen for commands and execute them (as they do now)
+    - JS View renders execute commands from the beginning in order to sync up with the others.
+
+"""
 
 @widgets.register
 class BaseFigureWidget(widgets.DOMWidget):
@@ -280,6 +290,12 @@ class BaseFigureWidget(widgets.DOMWidget):
         send_val = [val]
 
         trace_index = self.traces.index(child)
+
+        # # Hack to see if this triggers sync to frontend
+        # tmp = [e for e in self._traces_data]
+        # self._traces_data = []
+        # self._traces_data = tmp
+
         self._send_restyle_msg({prop: send_val}, trace_indexes=trace_index)
 
     def _add_trace(self, trace):

@@ -6,6 +6,7 @@ var Plotly = require('plotly.js');
 // Models
 // ======
 var FigureModel = widgets.DOMWidgetModel.extend({
+
     defaults: _.extend(widgets.DOMWidgetModel.prototype.defaults(), {
         _model_name: 'FigureModel',
         _view_name: 'FigureView',
@@ -24,7 +25,62 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         // JS -> Python
         _plotly_addTraceDeltas: [],
         _plotly_restylePython: []
-    })
+    }),
+
+    initialize: function() {
+        FigureModel.__super__.initialize.apply(this, arguments);
+        console.log('FigureModel: initialize');
+        // this.on("change:_plotly_restyle", this.do_restyle, this);
+    },
+
+    do_restyle: function () {
+        console.log('FigureModel: do_restyle');
+        var data = this.get('_plotly_restyle');
+        if (data !== null) {
+            var style = data[0];
+            var trace_indexes = data[1];
+
+            if (trace_indexes === null || trace_indexes === undefined) {
+                trace_indexes = Array.apply(null, Array(self.el.data.length)).map(function (_, i) {return i;});
+            }
+            if (!Array.isArray(trace_indexes)) {
+                // Make sure idx is an array
+                trace_indexes = [trace_indexes];
+            }
+
+            // Restyle data already normalized on Python Side
+            this._performRestyle(style, trace_indexes)
+
+            // Plotly.restyle(this.el, style, idx);
+        }
+    },
+
+    _performRestyle: function (style, trace_indexes, path){
+        if (path === undefined) {
+            path = []
+        }
+
+        for (var k in style) {
+            if (!style.hasOwnProperty(k)) { continue }
+
+            var v = style[k];
+
+            if (typeof v === 'object') {
+                this._performRestyle(v, trace_indexes, path + [k])
+            } else {
+                for (var t = 0; t < trace_indexes.length; t++) {
+                    var trace_ind = trace_indexes[t];
+                    var trace_data = this.get('_traces_data')[trace_ind];
+                    for (var path_el in path) {
+                        trace_data = trace_data[path_el];
+                    }
+
+                    trace_data[k] = v[t % v.length]
+                }
+            }
+        }
+
+    }
 });
 
 
@@ -36,20 +92,23 @@ var FigureView = widgets.DOMWidgetView.extend({
 
         // Initialize empty figure
         console.log('render');
+        console.log(this.model.get('_traces_data'));
 
         // Clone traces and layout so plotly instances in the views don't mutate the model
         var initial_traces = JSON.parse(JSON.stringify(this.model.get('_traces_data')));
         var initial_layout = JSON.parse(JSON.stringify(this.model.get('_layout_data')));
         Plotly.plot(this.el, initial_traces, initial_layout);
 
-        // Plotly.plot(this.el, this.model.get('_traces_data'), this.model.get('_layout_data'));
-        console.log(this.el._fullData);
-
         // Python -> JS event properties
         this.model.on('change:_plotly_addTraces', this.do_addTraces, this);
         this.model.on('change:_plotly_deleteTraces', this.do_deleteTraces, this);
         this.model.on('change:_plotly_moveTraces', this.do_moveTraces, this);
         this.model.on('change:_plotly_restyle', this.do_restyle, this);
+
+        this.model.on('change:_traces_data', function () {
+            console.log('change:_traces_data');
+            console.log(this.model.get('_traces_data'));
+        }, this);
 
         // Plotly events
         var that = this;
