@@ -150,7 +150,8 @@ class BaseFigureWidget(widgets.DOMWidget):
     @staticmethod
     def apply_trace_delta(trace_data, delta_data):
         for p, delta_val in delta_data.items():
-            assert p in trace_data
+            if p not in trace_data:
+                raise ValueError('Unexpected property {p} = {v}'.format(p=p, v=delta_val))
 
             trace_val = trace_data[p]
             if isinstance(delta_val, dict):
@@ -161,74 +162,6 @@ class BaseFigureWidget(widgets.DOMWidget):
             else:
                 trace_data[p] = delta_val
 
-    @staticmethod
-    def _normalize_restyle_data(restyle_data: dict):
-        """
-        E.g.
-
-        {'a.foo.bar': 3, 'a.foo.baz': ['hello!', 'world!']} ->
-            {'a': {'foo': {'bar': [3], 'baz': ['hello!', 'world!']}}}
-
-        Parameters
-        ----------
-        restyle_data :
-
-        Returns
-        -------
-
-        """
-        res = {}
-        to_merge = []
-        for k, v in restyle_data.items():
-            assert isinstance(k, str)
-
-            if not isinstance(v, list):
-                v = [v]
-
-            # Check for keys with periods
-            #  e.g. marker.color.
-            outer_name, *rest_names_list = k.split('.')
-            if rest_names_list:
-                k2 = outer_name
-                v2 = {'.'.join(rest_names_list): v}
-            else:
-                k2 = k
-                # Make sure v2 is a list
-                if isinstance(v, list):
-                    v2 = v
-                else:
-                    v2 = [v]
-
-            if isinstance(v2, dict):
-                v3 = BaseFigureWidget._normalize_restyle_data(v2)
-                to_merge.append({k2: v3})
-            else:
-                res[k2] = v2
-
-        # Merge dictionary properties
-        for d in to_merge:
-            BaseFigureWidget._merge_restyle_data(res, d)
-
-        return res
-
-    @staticmethod
-    def _merge_restyle_data(to_data, from_data, path=None):
-        if path is None:
-            path = []
-
-        for k in from_data:
-            if k in to_data:
-                if isinstance(to_data[k], dict) and isinstance(from_data[k], dict):
-                    BaseFigureWidget._merge_restyle_data(to_data[k], from_data[k], path + [k])
-                elif to_data[k] == from_data[k]:
-                    pass  # Same values at leaf
-                else:
-                    raise ValueError('Style dictionaries conflict at {path}'.format(path=path + [k]))
-            else:
-                to_data[k] = from_data[k]
-
-        return to_data
-
     def restyle(self, style, trace_indexes=None):
         if trace_indexes is None:
             trace_indexes = list(range(len(self.traces)))
@@ -236,43 +169,50 @@ class BaseFigureWidget(widgets.DOMWidget):
         if not isinstance(trace_indexes, (list, tuple)):
             trace_indexes = [trace_indexes]
 
-        style2 = BaseFigureWidget._normalize_restyle_data(style)
-        restyle_msg = self._perform_restyle(style2, trace_indexes)
+        restyle_msg = self._perform_restyle(style, trace_indexes)
         if restyle_msg:
             self._send_restyle_msg(restyle_msg, trace_indexes=trace_indexes)
 
-    def _perform_restyle(self, style, trace_indexes, path=None):
-        """ This should perform the restyle but it won't trigger
-        Need to return a restyle message"""
-        if path is None:
-            path = []
+    def _perform_restyle(self, style, trace_indexes):
+        """
+        """
 
-        restyle_msgs = []
-        for k, v in style.items():
+        # Make sure trace_indexes is an array
+        if not isinstance(trace_indexes, list):
+            trace_indexes = [trace_indexes]
+
+        restyle_data = {}  # Resytyle data to send to JS side as Plotly.restylePlot()
+
+        for raw_key, v in style.items():
+            # kstr may have periods. e.g. foo.bar
+            key_path = raw_key.split('.')
+
+            if not isinstance(v, list):
+                v = [v]
+
             if isinstance(v, dict):
-                msg = self._perform_restyle(v, trace_indexes, path + [k])
-                restyle_msgs.append(msg)
+                raise ValueError('Restyling objects not supported, only individual properties\n'
+                                 '    Received: {{k}: {v}}'.format(k=raw_key, v=v))
             else:
                 restyle_msg_vs = []
                 any_vals_changed = False
                 for i, trace_ind in enumerate(trace_indexes):
                     trace_data = self._traces_data[trace_ind]
-                    for path_el in path:
-                        trace_data = trace_data[path_el]
+                    for key_path_el in key_path[:-1]:
+                        trace_data = trace_data[key_path_el]
+                    last_key = key_path[-1]
+
                     trace_v = v[i % len(v)]
+
                     restyle_msg_vs.append(trace_v)
 
-                    if k not in trace_data or trace_data[k] != trace_v:
-                        trace_data[k] = trace_v
+                    if last_key not in trace_data or trace_data[last_key] != trace_v:
+                        trace_data[last_key] = trace_v
                         any_vals_changed = True
 
                 if any_vals_changed:
                     # At lease on of the values for one of the traces has changed. Update them all
-                    restyle_msgs.append({'.'.join(path + [k]): restyle_msg_vs})
-
-        restyle_data = {}
-        for restyle_msg in restyle_msgs:
-            self._merge_restyle_data(restyle_data, restyle_msg)
+                    restyle_data[raw_key] = restyle_msg_vs
 
         return restyle_data
 
@@ -290,11 +230,6 @@ class BaseFigureWidget(widgets.DOMWidget):
         send_val = [val]
 
         trace_index = self.traces.index(child)
-
-        # # Hack to see if this triggers sync to frontend
-        # tmp = [e for e in self._traces_data]
-        # self._traces_data = []
-        # self._traces_data = tmp
 
         self._send_restyle_msg({prop: send_val}, trace_indexes=trace_index)
 

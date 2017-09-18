@@ -30,7 +30,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
     initialize: function() {
         FigureModel.__super__.initialize.apply(this, arguments);
         console.log('FigureModel: initialize');
-        // this.on("change:_plotly_restyle", this.do_restyle, this);
+        this.on("change:_plotly_restyle", this.do_restyle, this);
     },
 
     do_restyle: function () {
@@ -48,38 +48,42 @@ var FigureModel = widgets.DOMWidgetModel.extend({
                 trace_indexes = [trace_indexes];
             }
 
-            // Restyle data already normalized on Python Side
             this._performRestyle(style, trace_indexes)
-
-            // Plotly.restyle(this.el, style, idx);
         }
     },
 
-    _performRestyle: function (style, trace_indexes, path){
-        if (path === undefined) {
-            path = []
+    _performRestyle: function (style, trace_indexes){
+
+        // Make sure trace_indexes is an array
+        if (!Array.isArray(trace_indexes)) {
+            trace_indexes = [trace_indexes];
         }
 
-        for (var k in style) {
-            if (!style.hasOwnProperty(k)) { continue }
+        for (var rawKey in style) {
+            if (!style.hasOwnProperty(rawKey)) { continue }
+            var v = style[rawKey];
 
-            var v = style[k];
+            if (!Array.isArray(v)) {
+                v = [v]
+            }
 
-            if (typeof v === 'object') {
-                this._performRestyle(v, trace_indexes, path + [k])
-            } else {
-                for (var t = 0; t < trace_indexes.length; t++) {
-                    var trace_ind = trace_indexes[t];
-                    var trace_data = this.get('_traces_data')[trace_ind];
-                    for (var path_el in path) {
-                        trace_data = trace_data[path_el];
-                    }
+            var keyPath = rawKey.split('.');
 
-                    trace_data[k] = v[t % v.length]
+            for (var i = 0; i < trace_indexes.length; i++) {
+                var trace_ind = trace_indexes[i];
+                var trace_data = this.get('_traces_data')[trace_ind];
+
+                for (var kp = 0; kp < keyPath.length-1; kp++) {
+                    var keyPathEl = keyPath[kp];
+                    trace_data = trace_data[keyPathEl];
                 }
+
+                var lasKey = keyPath[keyPath.length-1];
+                var trace_v = v[i % v.length];
+
+                trace_data[lasKey] = trace_v;
             }
         }
-
     }
 });
 
