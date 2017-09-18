@@ -9,7 +9,8 @@ from codegen.validators import write_validator_py
 
 if __name__ == '__main__':
 
-    outdir = 'ipyplotly/'
+    # outdir = 'ipyplotly/'
+    outdir = 'codegen/output'
 
     # Load plotly schema
     # ------------------

@@ -19,7 +19,7 @@ def build_validators_py(parent_node: TraceNode):
 
         buffer.write(f"""
         
-class {datatype_node.name_pascal_case}Validator(bv.{datatype_node.datatype_pascal_case}Validator):
+class {datatype_node.name_validator}(bv.{datatype_node.datatype_pascal_case}Validator):
     def __init__(self):""")
 
         # Add import
@@ -28,12 +28,12 @@ class {datatype_node.name_pascal_case}Validator(bv.{datatype_node.datatype_pasca
         from ipyplotly.datatypes.trace{parent_node.trace_pkg_str} import {datatype_node.name_pascal_case}""")
 
         buffer.write(f"""
-        super().__init__(name='{datatype_node.name}',
-                         parent_name='{datatype_node.parent_path_str}'""")
+        super().__init__(name='{datatype_node.name_property}',
+                         parent_name='{datatype_node.parent_dir_str}'""")
 
         if datatype_node.is_compound:
             buffer.write(f""",
-                         data_class={datatype_node.name_pascal_case}""")
+                         data_class={datatype_node.name_class}""")
         else:
             assert datatype_node.is_simple
 
@@ -59,7 +59,7 @@ def write_validator_py(outdir, node: TraceNode):
 
     # Write file
     # ----------
-    filedir = opath.join(outdir, 'validators', 'trace', *node.trace_path)
+    filedir = opath.join(outdir, 'validators', 'trace', *node.dir_path)
 
     # ### Create output directory
     if opath.exists(filedir):

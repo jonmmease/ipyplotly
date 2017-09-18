@@ -29,6 +29,9 @@ def get_typing_type(plotly_type, array_ok=False):
 
 
 def build_datatypes_py(parent_node: TraceNode):
+    compound_nodes = parent_node.child_compound_datatypes
+    if not compound_nodes:
+        return None
 
     buffer = StringIO()
 
@@ -38,14 +41,11 @@ def build_datatypes_py(parent_node: TraceNode):
     buffer.write('from numbers import Number\n')
     buffer.write('from ipyplotly.basedatatypes import (BaseTraceType, BaseFigureWidget)\n')
 
-    compound_nodes = parent_node.child_compound_datatypes
+    datatypes_csv = ', '.join([f'{n.name} as d_{n.name}' for n in compound_nodes])
+    validators_csv = ', '.join([f'{n.name} as v_{n.name}' for n in compound_nodes])
 
-    if compound_nodes:
-        datatypes_csv = ', '.join([f'{n.name} as d_{n.name}' for n in compound_nodes])
-        validators_csv = ', '.join([f'{n.name} as v_{n.name}' for n in compound_nodes])
-
-        buffer.write(f'from ipyplotly.validators.trace{parent_node.trace_pkg_str} import ({validators_csv})\n')
-        buffer.write(f'from ipyplotly.datatypes.trace{parent_node.trace_pkg_str} import ({datatypes_csv})\n')
+    buffer.write(f'from ipyplotly.validators.trace{parent_node.trace_pkg_str} import ({validators_csv})\n')
+    buffer.write(f'from ipyplotly.datatypes.trace{parent_node.trace_pkg_str} import ({datatypes_csv})\n')
 
     # Compound datatypes loop
     # -----------------------
@@ -54,12 +54,14 @@ def build_datatypes_py(parent_node: TraceNode):
         # ### Class definition ###
         buffer.write(f"""
 
-class {compound_node.name_pascal_case}(BaseTraceType):\n""")
+class {compound_node.name_class}(BaseTraceType):\n""")
 
         # ### Property definitions ###
         for subtype_node in compound_node.child_datatypes:
-            if subtype_node.is_compound:
-                prop_type = f'd_{compound_node.name}.{subtype_node.name_pascal_case}'
+            if subtype_node.is_array_element:
+                prop_type = f'Tuple({compound_node.name}.{subtype_node.name_class})'
+            elif subtype_node.is_compound:
+                prop_type = f'd_{compound_node.name}.{subtype_node.name_class}'
             else:
                 prop_type = get_typing_type(subtype_node.datatype)
 
@@ -68,38 +70,37 @@ class {compound_node.name_pascal_case}(BaseTraceType):\n""")
             subtype_description = '\n'.join(textwrap.wrap(raw_description,
                                                           subsequent_indent=' ' * 8,
                                                           width=119 - 8))
-            under_name = subtype_node.name_undercase
             if subtype_node.is_simple:
                 buffer.write(f"""\
 
-    # {under_name}
-    # {'-' * len(under_name)}
+    # {subtype_node.name_property}
+    # {'-' * len(subtype_node.name_property)}
     @property
-    def {under_name}(self) -> {prop_type}:
+    def {subtype_node.name_property}(self) -> {prop_type}:
         \"\"\"
         {subtype_description}
         \"\"\"
-        return self._data['{under_name}']
+        return self._data['{subtype_node.name_property}']
         
-    @{under_name}.setter
-    def {under_name}(self, val):
-        self._set_prop('{under_name}', val)\n""")
+    @{subtype_node.name_property}.setter
+    def {subtype_node.name_property}(self, val):
+        self._set_prop('{subtype_node.name_property}', val)\n""")
 
             else:
                 buffer.write(f"""\
 
-    # {under_name}
-    # {'-' * len(under_name)}
+    # {subtype_node.name_property}
+    # {'-' * len(subtype_node.name_property)}
     @property
-    def {under_name}(self) -> {prop_type}:
+    def {subtype_node.name_property}(self) -> {prop_type}:
         \"\"\"
         {subtype_description}
         \"\"\"
-        return self._{under_name}
+        return self._{subtype_node.name_property}
 
-    @{under_name}.setter
-    def {under_name}(self, val):
-        self._{under_name} = self._set_compound_prop('{under_name}', val, self._{under_name})\n""")
+    @{subtype_node.name_property}.setter
+    def {subtype_node.name_property}(self, val):
+        self._{subtype_node.name_property} = self._set_compound_prop('{subtype_node.name_property}', val, self._{subtype_node.name_property})\n""")
 
         # ### Constructor ###
         buffer.write(f"""
@@ -109,19 +110,18 @@ class {compound_node.name_pascal_case}(BaseTraceType):\n""")
         add_docstring(buffer, compound_node)
 
         buffer.write(f"""
-        super().__init__('{compound_node.name}')
+        super().__init__('{compound_node.name_property}')
 
         # Initialize data dict
         # --------------------
-        self._data['type'] = '{compound_node.trace_path_str}'
+        self._data['type'] = '{compound_node.dir_str}'
         
         # Initialize validators
         # ---------------------""")
         for subtype_node in compound_node.child_datatypes:
-            under_name = subtype_node.name_undercase
 
             buffer.write(f"""
-        self._validators['{under_name}'] = v_{compound_node.name}.{subtype_node.name_pascal_case}Validator()""")
+        self._validators['{subtype_node.name_property}'] = v_{compound_node.name}.{subtype_node.name_validator}()""")
 
         compound_subtype_nodes = compound_node.child_compound_datatypes
         if compound_subtype_nodes:
@@ -130,18 +130,16 @@ class {compound_node.name_pascal_case}(BaseTraceType):\n""")
         # Init compound properties
         # ------------------------""")
             for compound_subtype_node in compound_subtype_nodes:
-                under_name = compound_subtype_node.name_undercase
                 buffer.write(f"""
-        self._{under_name} = None""")
+        self._{compound_subtype_node.name_property} = None""")
 
         buffer.write(f"""
         
         # Populate data dict with properties
         # ----------------------------------""")
         for subtype_node in compound_node.child_datatypes:
-            under_name = subtype_node.name_undercase
             buffer.write(f"""
-        self.{under_name} = {under_name}""")
+        self.{subtype_node.name_property} = {subtype_node.name_property}""")
 
     return buffer.getvalue()
 
@@ -190,16 +188,17 @@ def write_datatypes_py(outdir, node: TraceNode):
     # Generate source code
     # --------------------
     datatype_source = build_datatypes_py(node)
-    formatted_source = format_source(datatype_source)
+    if datatype_source:
+        formatted_source = format_source(datatype_source)
 
-    # Write file
-    # ----------
-    filedir = opath.join(outdir, 'datatypes', 'trace', *node.trace_path)
-    filepath = opath.join(filedir, '__init__.py')
+        # Write file
+        # ----------
+        filedir = opath.join(outdir, 'datatypes', 'trace', *node.dir_path)
+        filepath = opath.join(filedir, '__init__.py')
 
-    os.makedirs(filedir, exist_ok=True)
-    with open(filepath, 'wt') as f:
-        f.write(formatted_source)
+        os.makedirs(filedir, exist_ok=True)
+        with open(filepath, 'wt') as f:
+            f.write(formatted_source)
 
 
 def build_figure_py(base_node: TraceNode):
@@ -253,7 +252,7 @@ class Figure(BaseFigureWidget):\n""")
 def append_figure_class(outdir, base_node: TraceNode):
 
     if base_node.trace_path:
-        raise ValueError('Expected root trace node. Received node with path "%s"' % base_node.trace_path_str)
+        raise ValueError('Expected root trace node. Received node with path "%s"' % base_node.dir_str)
 
     figure_source = build_figure_py(base_node)
     formatted_source = format_source(figure_source)
