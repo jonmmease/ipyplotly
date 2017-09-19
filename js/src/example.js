@@ -230,7 +230,7 @@ var FigureView = widgets.DOMWidgetView.extend({
                 if (data[p] !== fullData[p] || p === 'uid') {  // Let uids through
                     // property has non-null value in fullData that doesn't match the value in
                     var full_val = fullData[p];
-                    if (typeof full_val === 'object') {
+                    if (typeof full_val === 'object' && !Array.isArray(full_val)) {
                         var full_obj = this.create_delta_object(data[p], full_val);
                         if (Object.keys(full_obj).length > 0) {
                             // new object is not empty

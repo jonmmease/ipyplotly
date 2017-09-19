@@ -41,11 +41,14 @@ def build_datatypes_py(parent_node: TraceNode):
     buffer.write('from numbers import Number\n')
     buffer.write('from ipyplotly.basedatatypes import (BaseTraceType, BaseFigureWidget)\n')
 
-    datatypes_csv = ', '.join([f'{n.name} as d_{n.name}' for n in compound_nodes])
+    # ### Validators ###
     validators_csv = ', '.join([f'{n.name} as v_{n.name}' for n in compound_nodes])
-
     buffer.write(f'from ipyplotly.validators.trace{parent_node.trace_pkg_str} import ({validators_csv})\n')
-    buffer.write(f'from ipyplotly.datatypes.trace{parent_node.trace_pkg_str} import ({datatypes_csv})\n')
+
+    # ### Datatypes ###
+    datatypes_csv = ', '.join([f'{n.name} as d_{n.name}' for n in compound_nodes if n.child_compound_datatypes])
+    if datatypes_csv:
+        buffer.write(f'from ipyplotly.datatypes.trace{parent_node.trace_pkg_str} import ({datatypes_csv})\n')
 
     # Compound datatypes loop
     # -----------------------
@@ -59,7 +62,7 @@ class {compound_node.name_class}(BaseTraceType):\n""")
         # ### Property definitions ###
         for subtype_node in compound_node.child_datatypes:
             if subtype_node.is_array_element:
-                prop_type = f'Tuple({compound_node.name}.{subtype_node.name_class})'
+                prop_type = f'Tuple[d_{compound_node.name}.{subtype_node.name_class}]'
             elif subtype_node.is_compound:
                 prop_type = f'd_{compound_node.name}.{subtype_node.name_class}'
             else:
@@ -86,7 +89,9 @@ class {compound_node.name_class}(BaseTraceType):\n""")
     def {subtype_node.name_property}(self, val):
         self._set_prop('{subtype_node.name_property}', val)\n""")
 
-            else:
+            else:  # node is compound or array node
+                prop_set_method = '_set_array_prop' if subtype_node.is_array_element else '_set_compound_prop'
+
                 buffer.write(f"""\
 
     # {subtype_node.name_property}
@@ -100,7 +105,8 @@ class {compound_node.name_class}(BaseTraceType):\n""")
 
     @{subtype_node.name_property}.setter
     def {subtype_node.name_property}(self, val):
-        self._{subtype_node.name_property} = self._set_compound_prop('{subtype_node.name_property}', val, self._{subtype_node.name_property})\n""")
+        self._{subtype_node.name_property} = self.{prop_set_method}('{subtype_node.name_property}', val, 
+        self._{subtype_node.name_property})\n""")
 
         # ### Constructor ###
         buffer.write(f"""
@@ -146,11 +152,11 @@ class {compound_node.name_class}(BaseTraceType):\n""")
 
 def add_constructor_params(buffer, compound_node, colon=True):
     for i, subtype_node in enumerate(compound_node.child_datatypes):
-        under_name = subtype_node.name_undercase
+        # under_name = subtype_node.name_property
         dflt = subtype_node.node_data.get('dflt', None)
         is_last = i == len(compound_node.child_datatypes) - 1
         buffer.write(f""",
-            {under_name}={repr(dflt)}""")
+            {subtype_node.name_property}={repr(dflt)}""")
     buffer.write(f"""
         ){':' if colon else ''}""")
 
@@ -164,14 +170,13 @@ def add_docstring(buffer, compound_node):
         Parameters
         ----------""")
     for subtype_node in compound_node.child_datatypes:
-        under_name = subtype_node.name_undercase
         raw_description = subtype_node.description
         subtype_description = '\n'.join(textwrap.wrap(raw_description,
                                                       subsequent_indent=' ' * 12,
                                                       width=119 - 12))
 
         buffer.write(f"""
-        {under_name}
+        {subtype_node.name_property}
             {subtype_description}""")
 
     # #### close docstring ####
@@ -233,10 +238,9 @@ class Figure(BaseFigureWidget):\n""")
         """)
 
         for i, subtype_node in enumerate(trace_node.child_datatypes):
-            under_name = subtype_node.name_undercase
             is_last = i == len(trace_node.child_datatypes) - 1
             buffer.write(f"""
-                {under_name}={under_name}{'' if is_last else ','}""")
+                {subtype_node.name_property}={subtype_node.name_property}{'' if is_last else ','}""")
 
         buffer.write(f"""
             )""")

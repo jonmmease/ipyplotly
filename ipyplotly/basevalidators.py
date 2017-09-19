@@ -792,3 +792,41 @@ class CompoundValidator(BaseValidator):
                                                                      typ=type(v)))
 
         return v
+
+
+class ArrayValidator(BaseValidator):
+    def __init__(self, name, parent_name, element_class):
+        super().__init__(name=name, parent_name=parent_name)
+        self.data_class = element_class
+
+    def validate_coerce(self, v):
+        if v is None:
+            v = ()
+
+        elif isinstance(v, (list, tuple)):
+            res = []
+            for v_el in v:
+                if isinstance(v_el, self.data_class):
+                    res.append(v_el)
+                elif isinstance(v_el, dict):
+                    res.append(self.data_class(**v_el))
+                else:
+                    raise ValueError(("The {name} property of {parent_name} must be a list or tuple "
+                                      "of {cls_name} instances.\n"
+                                      "Received {col_typ} with an instance of type {typ}"
+                                      ).format(name=self.name,
+                                               parent_name=self.parent_name,
+                                               cls_name=self.data_class.__name__,
+                                               col_type=type(v),
+                                               typ=type(v_el)))
+            v = tuple(res)
+
+        elif not isinstance(v, str):
+            raise ValueError(("The {name} property of {parent_name} must be a list or tuple "
+                              "of {cls_name} instances.\n"
+                              "Received value of type {typ}").format(name=self.name,
+                                                                     parent_name=self.parent_name,
+                                                                     cls_name=self.data_class.__name__,
+                                                                     typ=type(v)))
+
+        return v

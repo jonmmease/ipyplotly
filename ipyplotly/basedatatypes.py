@@ -2,19 +2,8 @@ import collections
 import uuid
 
 import ipywidgets as widgets
-from traitlets import List, Unicode, Dict, Tuple, default, observe, validate, TraitError
-from ipyplotly.basevalidators import CompoundValidator
+from traitlets import List, Unicode, Dict, Tuple, default, observe
 
-"""
-Next steps:
-
-    - Don't sync _layout_data and _traces_data
-    - JS model keeps a stack of plotly commands, not layout/traces data itself
-    - JS Model listens for commands and adds them to the stack
-    - JS Views listen for commands and execute them (as they do now)
-    - JS View renders execute commands from the beginning in order to sync up with the others.
-
-"""
 
 @widgets.register
 class BaseFigureWidget(widgets.DOMWidget):
@@ -61,6 +50,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         if not deltas:
             return
 
+        # print('addTraceDeltas msg: {deltas}'.format(deltas=deltas))
         for delta in deltas:
             uid = delta['uid']
             uid_traces = [trace for trace in self.traces if trace._data.get('uid', None) == uid]
@@ -79,6 +69,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             return
 
         restyle_data = restyle_msg[0]
+        # print('delta restyle: {restyle_data}'.format(restyle_data=restyle_data))
         if len(restyle_msg) > 1 and restyle_msg[1] is not None:
             trace_inds = restyle_msg[1]
         else:
@@ -148,19 +139,34 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._traces = new_traces
 
     @staticmethod
+    def _is_object_list(v):
+        return isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict)
+
+    @staticmethod
     def apply_trace_delta(trace_data, delta_data):
-        for p, delta_val in delta_data.items():
-            if p not in trace_data:
-                raise ValueError('Unexpected property {p} = {v}'.format(p=p, v=delta_val))
 
-            trace_val = trace_data[p]
-            if isinstance(delta_val, dict):
-                assert isinstance(trace_data, dict)
+        if isinstance(trace_data, dict):
+            assert isinstance(delta_data, dict)
 
-                BaseFigureWidget.apply_trace_delta(trace_val, delta_val)
-                pass
-            else:
-                trace_data[p] = delta_val
+            for p, delta_val in delta_data.items():
+                if p not in trace_data:
+                    continue
+
+                trace_val = trace_data[p]
+                if isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
+                    BaseFigureWidget.apply_trace_delta(trace_val, delta_val)
+                else:
+                    trace_data[p] = delta_val
+        elif isinstance(trace_data, list):
+            assert isinstance(delta_data, list)
+
+            for i, delta_val in enumerate(delta_data):
+                trace_val = trace_data[i]
+                if isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
+                    BaseFigureWidget.apply_trace_delta(trace_val, delta_val)
+                else:
+                    trace_data[i] = delta_val
+
 
     def restyle(self, style, trace_indexes=None):
         if trace_indexes is None:
@@ -186,6 +192,12 @@ class BaseFigureWidget(widgets.DOMWidget):
         for raw_key, v in style.items():
             # kstr may have periods. e.g. foo.bar
             key_path = raw_key.split('.')
+            for i in range(len(key_path)):
+                try:
+                    # Convert elements to ints if possible
+                    key_path[i] = int(key_path[i])
+                except ValueError as _:
+                    pass
 
             if not isinstance(v, list):
                 v = [v]
@@ -197,9 +209,12 @@ class BaseFigureWidget(widgets.DOMWidget):
                 restyle_msg_vs = []
                 any_vals_changed = False
                 for i, trace_ind in enumerate(trace_indexes):
+                    if trace_ind >= len(self._traces_data):
+                        raise ValueError('Trace index {trace_ind} out of range'.format(trace_ind=trace_ind))
                     trace_data = self._traces_data[trace_ind]
                     for key_path_el in key_path[:-1]:
                         trace_data = trace_data[key_path_el]
+
                     last_key = key_path[-1]
 
                     trace_v = v[i % len(v)]
@@ -207,6 +222,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                     restyle_msg_vs.append(trace_v)
 
                     if last_key not in trace_data or trace_data[last_key] != trace_v:
+                        print(f"{trace_data}[{last_key}] = {trace_v}")
                         trace_data[last_key] = trace_v
                         any_vals_changed = True
 
@@ -281,6 +297,27 @@ class BaseTraceType:
         if curr_val is not None and curr_val is not val:
             curr_val.parent = None
 
+        # Update data dict
+        if prop not in self._data or self._data[prop] != dict_val:
+            self._data[prop] = dict_val
+            self._send_restyle(prop, dict_val)
+
+        return val
+
+    def _set_array_prop(self, prop, val, curr_val):
+        validator = self._validators.get(prop)
+        val = validator.validate_coerce(val)  # type: tuple
+
+        # Reparent
+        if curr_val:
+            for cv in curr_val:
+                cv.parent = None
+
+        for v in val:
+            v.parent = self
+
+        # Update data dict
+        dict_val = [v._data for v in val]
         if prop not in self._data or self._data[prop] != dict_val:
             self._data[prop] = dict_val
             self._send_restyle(prop, dict_val)
@@ -288,7 +325,19 @@ class BaseTraceType:
         return val
 
     def _restyle_child(self, child, prop, val):
-        self._send_restyle('{child_name}.{prop}'.format(child_name=child.type_name, prop=prop), val)
+
+        child_prop_val = getattr(self, child.type_name)
+        if isinstance(child_prop_val, (list, tuple)):
+            child_ind = child_prop_val.index(child)
+            restyle_path = '{child_name}.{child_ind}.{prop}'.format(
+                child_name=child.type_name,
+                child_ind=child_ind,
+                prop=prop)
+        else:
+            restyle_path = '{child_name}.{prop}'.format(child_name=child.type_name, prop=prop)
+
+        print(f'{self.type_name}: {restyle_path}')
+        self._send_restyle(restyle_path, val)
 
 
 class BaseLayoutType:

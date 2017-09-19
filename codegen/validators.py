@@ -31,7 +31,10 @@ class {datatype_node.name_validator}(bv.{datatype_node.datatype_pascal_case}Vali
         super().__init__(name='{datatype_node.name_property}',
                          parent_name='{datatype_node.parent_dir_str}'""")
 
-        if datatype_node.is_compound:
+        if datatype_node.is_array_element:
+            buffer.write(f""",
+                         element_class={datatype_node.name_class}""")
+        elif datatype_node.is_compound:
             buffer.write(f""",
                          data_class={datatype_node.name_class}""")
         else:
