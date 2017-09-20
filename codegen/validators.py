@@ -2,10 +2,14 @@ import os
 import os.path as opath
 import shutil
 from io import StringIO
-from codegen.utils import TraceNode, format_source
+from codegen.utils import format_source, PlotlyNode
 import textwrap
 
-def build_validators_py(parent_node: TraceNode):
+def build_validators_py(parent_node: PlotlyNode):
+    datatype_nodes = parent_node.child_datatypes
+    if not datatype_nodes:
+        return None
+
     buffer = StringIO()
 
     # Imports
@@ -14,7 +18,6 @@ def build_validators_py(parent_node: TraceNode):
 
     # Compound datatypes loop
     # -----------------------
-    datatype_nodes = parent_node.child_datatypes
     for datatype_node in datatype_nodes:
 
         buffer.write(f"""
@@ -25,7 +28,7 @@ class {datatype_node.name_validator}(bv.{datatype_node.datatype_pascal_case}Vali
         # Add import
         if datatype_node.is_compound:
             buffer.write(f"""
-        from ipyplotly.datatypes.trace{parent_node.trace_pkg_str} import {datatype_node.name_pascal_case}""")
+        from ipyplotly.datatypes{parent_node.pkg_str} import {datatype_node.name_pascal_case}""")
 
         buffer.write(f"""
         super().__init__(name='{datatype_node.name_property}',
@@ -51,27 +54,27 @@ class {datatype_node.name_validator}(bv.{datatype_node.datatype_pascal_case}Vali
     return buffer.getvalue()
 
 
-def write_validator_py(outdir, node: TraceNode):
+def write_validator_py(outdir, node: PlotlyNode):
 
     # Generate source code
     # --------------------
     validator_source = build_validators_py(node)
+    if validator_source:
+        formatted_source = format_source(validator_source)
 
-    formatted_source = format_source(validator_source)
+        # Write file
+        # ----------
+        filedir = opath.join(outdir, 'validators', *node.dir_path)
 
-    # Write file
-    # ----------
-    filedir = opath.join(outdir, 'validators', 'trace', *node.dir_path)
+        # ### Create output directory
+        if opath.exists(filedir):
+            shutil.rmtree(filedir)
+        os.makedirs(filedir)
 
-    # ### Create output directory
-    if opath.exists(filedir):
-        shutil.rmtree(filedir)
-    os.makedirs(filedir)
-
-    filepath = opath.join(filedir, '__init__.py')
-    os.makedirs(filedir, exist_ok=True)
-    with open(filepath, 'wt') as f:
-        f.write(formatted_source)
+        filepath = opath.join(filedir, '__init__.py')
+        os.makedirs(filedir, exist_ok=True)
+        with open(filepath, 'wt') as f:
+            f.write(formatted_source)
 
 
 

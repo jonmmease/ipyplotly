@@ -21,6 +21,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         _plotly_deleteTraces: null,
         _plotly_moveTraces: null,
         _plotly_restyle: null,
+        _plotly_relayout:null,
 
         // JS -> Python
         _plotly_addTraceDeltas: [],

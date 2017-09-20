@@ -3,7 +3,7 @@ import os
 import os.path as opath
 import textwrap
 
-from codegen.utils import TraceNode, format_source
+from codegen.utils import TraceNode, format_source, PlotlyNode
 
 
 def get_typing_type(plotly_type, array_ok=False):
@@ -28,7 +28,7 @@ def get_typing_type(plotly_type, array_ok=False):
         return pytype
 
 
-def build_datatypes_py(parent_node: TraceNode):
+def build_datatypes_py(parent_node: PlotlyNode):
     compound_nodes = parent_node.child_compound_datatypes
     if not compound_nodes:
         return None
@@ -39,16 +39,16 @@ def build_datatypes_py(parent_node: TraceNode):
     # -------
     buffer.write('from typing import *\n')
     buffer.write('from numbers import Number\n')
-    buffer.write('from ipyplotly.basedatatypes import (BaseTraceType, BaseFigureWidget)\n')
+    buffer.write(f'from ipyplotly.basedatatypes import {parent_node.base_datatype_class}\n')
 
     # ### Validators ###
     validators_csv = ', '.join([f'{n.name} as v_{n.name}' for n in compound_nodes])
-    buffer.write(f'from ipyplotly.validators.trace{parent_node.trace_pkg_str} import ({validators_csv})\n')
+    buffer.write(f'from ipyplotly.validators{parent_node.pkg_str} import ({validators_csv})\n')
 
     # ### Datatypes ###
     datatypes_csv = ', '.join([f'{n.name} as d_{n.name}' for n in compound_nodes if n.child_compound_datatypes])
     if datatypes_csv:
-        buffer.write(f'from ipyplotly.datatypes.trace{parent_node.trace_pkg_str} import ({datatypes_csv})\n')
+        buffer.write(f'from ipyplotly.datatypes{parent_node.pkg_str} import ({datatypes_csv})\n')
 
     # Compound datatypes loop
     # -----------------------
@@ -57,7 +57,7 @@ def build_datatypes_py(parent_node: TraceNode):
         # ### Class definition ###
         buffer.write(f"""
 
-class {compound_node.name_class}(BaseTraceType):\n""")
+class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
 
         # ### Property definitions ###
         for subtype_node in compound_node.child_datatypes:
@@ -188,7 +188,7 @@ def add_docstring(buffer, compound_node):
         \"\"\"""")
 
 
-def write_datatypes_py(outdir, node: TraceNode):
+def write_datatypes_py(outdir, node: PlotlyNode):
 
     # Generate source code
     # --------------------
@@ -198,7 +198,7 @@ def write_datatypes_py(outdir, node: TraceNode):
 
         # Write file
         # ----------
-        filedir = opath.join(outdir, 'datatypes', 'trace', *node.dir_path)
+        filedir = opath.join(outdir, 'datatypes', *node.dir_path)
         filepath = opath.join(filedir, '__init__.py')
 
         os.makedirs(filedir, exist_ok=True)
@@ -218,7 +218,7 @@ def build_figure_py(base_node: TraceNode):
     buffer.write(f'from ipyplotly.datatypes.trace import ({trace_types_csv})\n')
 
     buffer.write("""
-    
+
 class Figure(BaseFigureWidget):\n""")
 
     for trace_node in trace_nodes:
@@ -265,6 +265,7 @@ def append_figure_class(outdir, base_node: TraceNode):
     # --------------
     filepath = opath.join(outdir, '__init__.py')
 
-    with open(filepath, 'w') as f:
+    with open(filepath, 'a') as f:
+        f.write('\n\n')
         f.write(formatted_source)
 

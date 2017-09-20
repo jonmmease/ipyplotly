@@ -7,11 +7,16 @@ from traitlets import List, Unicode, Dict, Tuple, default, observe
 
 @widgets.register
 class BaseFigureWidget(widgets.DOMWidget):
+    # Constructor
+    # -----------
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Initialize backing property for trace objects
         self._traces = ()
+        self._layout = {}
 
+    # Traits
+    # ------
     _view_name = Unicode('FigureView').tag(sync=True)
     _view_module = Unicode('ipyplotly').tag(sync=True)
     _model_name = Unicode('FigureModel').tag(sync=True)
@@ -24,7 +29,9 @@ class BaseFigureWidget(widgets.DOMWidget):
     # Python -> JS message properties
     _plotly_addTraces = List(trait=Dict(),
                              allow_none=True).tag(sync=True)
+
     _plotly_restyle = List(allow_none=True).tag(sync=True)
+    _plotly_relayout = Dict().tag(sync=True)
 
     _plotly_deleteTraces = List(allow_none=True).tag(sync=True)
     _plotly_moveTraces = List(allow_none=True).tag(sync=True)
@@ -33,9 +40,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     _plotly_addTraceDeltas = List(allow_none=True).tag(sync=True)
     _plotly_restylePython = List(allow_none=True).tag(sync=True)
 
-    # Non-sync properties
-    traces = Tuple(allow_none=True)
-
+    # ### Trait methods ###
     @default('_plotly_addTraces')
     def _plotly_addTraces_default(self):
         return None
@@ -56,11 +61,10 @@ class BaseFigureWidget(widgets.DOMWidget):
             uid_traces = [trace for trace in self.traces if trace._data.get('uid', None) == uid]
             assert len(uid_traces) == 1
             uid_trace = uid_traces[0]
-            BaseFigureWidget.apply_trace_delta(uid_trace._data, delta)
+            BaseFigureWidget.apply_dict_delta(uid_trace._data, delta)
 
         # Remove processed trace delta data
         self._plotly_addTraceDeltas = None
-
 
     @observe('_plotly_restylePython')
     def handler_plotly_restylePython(self, change):
@@ -77,6 +81,8 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         self.restyle(restyle_data, trace_inds)
 
+    # Traces
+    # ------
     @property
     def traces(self):
         return self._traces
@@ -138,36 +144,6 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         self._traces = new_traces
 
-    @staticmethod
-    def _is_object_list(v):
-        return isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict)
-
-    @staticmethod
-    def apply_trace_delta(trace_data, delta_data):
-
-        if isinstance(trace_data, dict):
-            assert isinstance(delta_data, dict)
-
-            for p, delta_val in delta_data.items():
-                if p not in trace_data:
-                    continue
-
-                trace_val = trace_data[p]
-                if isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
-                    BaseFigureWidget.apply_trace_delta(trace_val, delta_val)
-                else:
-                    trace_data[p] = delta_val
-        elif isinstance(trace_data, list):
-            assert isinstance(delta_data, list)
-
-            for i, delta_val in enumerate(delta_data):
-                trace_val = trace_data[i]
-                if isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
-                    BaseFigureWidget.apply_trace_delta(trace_val, delta_val)
-                else:
-                    trace_data[i] = delta_val
-
-
     def restyle(self, style, trace_indexes=None):
         if trace_indexes is None:
             trace_indexes = list(range(len(self.traces)))
@@ -180,9 +156,6 @@ class BaseFigureWidget(widgets.DOMWidget):
             self._send_restyle_msg(restyle_msg, trace_indexes=trace_indexes)
 
     def _perform_restyle(self, style, trace_indexes):
-        """
-        """
-
         # Make sure trace_indexes is an array
         if not isinstance(trace_indexes, list):
             trace_indexes = [trace_indexes]
@@ -248,6 +221,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         self._send_restyle_msg({prop: send_val}, trace_indexes=trace_index)
 
+
     def _add_trace(self, trace):
 
         # Add UID if not set
@@ -265,18 +239,63 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         return trace
 
+    # Layout
+    # ------
+    @property
+    def layout(self):
+        return self._layout
 
-class BaseTraceType:
+    @layout.setter
+    def layout(self, new_layout):
+        # TODO: validate layout
+        self._layout = new_layout
 
+    def _relayout_child(self, child, prop, val):
+        send_val = [val]
+        self._send_relayout_msg({prop: send_val})
+
+    def _send_relayout_msg(self, layout):
+        self._plotly_relayout = layout
+        self._plotly_relayout = None
+
+    # Static helpers
+    # --------------
+    @staticmethod
+    def _is_object_list(v):
+        return isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict)
+
+    @staticmethod
+    def apply_dict_delta(trace_data, delta_data):
+
+        if isinstance(trace_data, dict):
+            assert isinstance(delta_data, dict)
+
+            for p, delta_val in delta_data.items():
+                if p not in trace_data:
+                    continue
+
+                trace_val = trace_data[p]
+                if isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
+                    BaseFigureWidget.apply_dict_delta(trace_val, delta_val)
+                else:
+                    trace_data[p] = delta_val
+        elif isinstance(trace_data, list):
+            assert isinstance(delta_data, list)
+
+            for i, delta_val in enumerate(delta_data):
+                trace_val = trace_data[i]
+                if isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
+                    BaseFigureWidget.apply_dict_delta(trace_val, delta_val)
+                else:
+                    trace_data[i] = delta_val
+
+
+class BasePlotlyType:
     def __init__(self, type_name):
         self.type_name = type_name
         self._data = {}
         self._validators = {}
         self.parent = None
-
-    def _send_restyle(self, prop, val):
-        if self.parent:
-            self.parent._restyle_child(self, prop, val)
 
     def _set_prop(self, prop, val):
         validator = self._validators.get(prop)
@@ -284,7 +303,7 @@ class BaseTraceType:
 
         if prop not in self._data or self._data[prop] != val:
             self._data[prop] = val
-            self._send_restyle(prop, val)
+            self._send_update(prop, val)
 
     def _set_compound_prop(self, prop, val, curr_val):
         validator = self._validators.get(prop)
@@ -299,7 +318,7 @@ class BaseTraceType:
         # Update data dict
         if prop not in self._data or self._data[prop] != dict_val:
             self._data[prop] = dict_val
-            self._send_restyle(prop, dict_val)
+            self._send_update(prop, dict_val)
 
         return val
 
@@ -319,11 +338,14 @@ class BaseTraceType:
         dict_val = [v._data for v in val]
         if prop not in self._data or self._data[prop] != dict_val:
             self._data[prop] = dict_val
-            self._send_restyle(prop, dict_val)
+            self._send_update(prop, dict_val)
 
         return val
 
-    def _restyle_child(self, child, prop, val):
+    def _send_update(self, prop, val):
+        raise NotImplementedError()
+
+    def _update_child(self, child, prop, val):
 
         child_prop_val = getattr(self, child.type_name)
         if isinstance(child_prop_val, (list, tuple)):
@@ -335,9 +357,33 @@ class BaseTraceType:
         else:
             restyle_path = '{child_name}.{prop}'.format(child_name=child.type_name, prop=prop)
 
-        self._send_restyle(restyle_path, val)
+        self._send_update(restyle_path, val)
 
 
-class BaseLayoutType:
+class BaseTraceType(BasePlotlyType):
+
+    def __init__(self, type_name):
+        super().__init__(type_name)
+
+    def _send_update(self, prop, val):
+        self._send_restyle(prop, val)
+
+    def _send_restyle(self, prop, val):
+        if self.parent:
+            self.parent._update_child(self, prop, val)
+
+
+
+
+class BaseLayoutType(BasePlotlyType):
+
     # _send_relayout analogous to _send_restyle above
-    pass
+    def __init__(self, type_name):
+        super().__init__(type_name)
+
+    def _send_update(self, prop, val):
+        pass
+
+    def _send_relayout(self, prop, val):
+        if self.parent:
+            self.parent._relayout_child(self, prop, val)
