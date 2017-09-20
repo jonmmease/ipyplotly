@@ -759,14 +759,50 @@ class InfoArrayValidator(BaseValidator):
     def __init__(self, name, parent_name, items, dflt=None, freeLength=None):
         super().__init__(name=name, parent_name=parent_name)
         self.items = items
+
+        self.item_validators = []
+        for i, item in enumerate(self.items):
+            item_validator = InfoArrayValidator.build_validator(item, '{name}[{i}]'.format(name=name, i=i), parent_name)
+            self.item_validators.append(item_validator)
+
         self.default = dflt
         self.free_length = freeLength
+
+    @staticmethod
+    def build_validator(validator_info, name, parent_name):
+        datatype = validator_info['valType']  # type: str
+        validator_classname = datatype.title().replace('_', '') + 'Validator'
+        validator_class = eval(validator_classname)
+
+        kwargs = {k: validator_info[k] for k in validator_info
+                  if k not in ['valType', 'description', 'role']}
+
+        return validator_class(name=name, parent_name=parent_name, **kwargs)
 
     def validate_coerce(self, v):
         if v is None:
             v = self.default
+        elif not isinstance(v, (list, tuple)):
+            raise ValueError(('The {name} property of {parent_name} must be a list or tuple.\n'
+                              'Received value of type {typ}: {v}').format(name=self.name,
+                                                                          parent_name=self.parent_name,
+                                                                          typ=type(v),
+                                                                          v=v))
+        elif len(v) != len(self.item_validators):
+            raise ValueError(('The {name} property of {parent_name} must be a list or tuple of length {N}.\n'
+                              'Received a {in_cls} of length {in_N}: {v}').format(name=self.name,
+                                                                                  parent_name=self.parent_name,
+                                                                                  N=len(self.item_validators),
+                                                                                  in_cls=type(v),
+                                                                                  in_N=len(v),
+                                                                                  v=v))
+        else:
+            # We have a list or tuple of the correct length
+            v = list(v)
+            for i, (el, validator) in enumerate(zip(v, self.item_validators)):
+                # Validate coerce elements
+                v[i] = validator.validate_coerce(el)
 
-        # TODO: Validate items
         return v
 
 

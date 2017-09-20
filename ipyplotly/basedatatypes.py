@@ -222,7 +222,6 @@ class BaseFigureWidget(widgets.DOMWidget):
                     restyle_msg_vs.append(trace_v)
 
                     if last_key not in trace_data or trace_data[last_key] != trace_v:
-                        print(f"{trace_data}[{last_key}] = {trace_v}")
                         trace_data[last_key] = trace_v
                         any_vals_changed = True
 
@@ -336,7 +335,6 @@ class BaseTraceType:
         else:
             restyle_path = '{child_name}.{prop}'.format(child_name=child.type_name, prop=prop)
 
-        print(f'{self.type_name}: {restyle_path}')
         self._send_restyle(restyle_path, val)
 
 
