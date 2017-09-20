@@ -24,14 +24,17 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         _plotly_relayout:null,
 
         // JS -> Python
-        _plotly_addTraceDeltas: [],
-        _plotly_restylePython: []
+        _plotly_addTraceDeltas: null,
+        _plotly_restylePython: null,
+        _plotly_relayoutPython: null
     }),
 
     initialize: function() {
         FigureModel.__super__.initialize.apply(this, arguments);
         console.log('FigureModel: initialize');
+
         this.on("change:_plotly_restyle", this.do_restyle, this);
+        this.on("change:_plotly_relayout", this.do_relayout, this);
     },
 
     do_restyle: function () {
@@ -85,6 +88,11 @@ var FigureModel = widgets.DOMWidgetModel.extend({
                 trace_data[lasKey] = trace_v;
             }
         }
+    },
+
+    do_relayout: function () {
+        console.log('FigureModel: do_relayout');
+        var data = this.get('_plotly_relayout');
     }
 });
 
@@ -109,6 +117,7 @@ var FigureView = widgets.DOMWidgetView.extend({
         this.model.on('change:_plotly_deleteTraces', this.do_deleteTraces, this);
         this.model.on('change:_plotly_moveTraces', this.do_moveTraces, this);
         this.model.on('change:_plotly_restyle', this.do_restyle, this);
+        this.model.on("change:_plotly_relayout", this.do_relayout, this);
 
         this.model.on('change:_traces_data', function () {
             console.log('change:_traces_data');
@@ -208,6 +217,15 @@ var FigureView = widgets.DOMWidgetView.extend({
 
             this.model.set('_plotly_addTraceDeltas', traceDeltas);
             this.touch();
+        }
+    },
+
+    do_relayout: function () {
+        console.log('FigureView: do_relayout');
+        var data = this.model.get('_plotly_relayout');
+        if (data !== null) {
+            console.log(data);
+            Plotly.relayout(this.el, data);
         }
     },
 

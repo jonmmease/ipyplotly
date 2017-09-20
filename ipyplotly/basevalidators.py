@@ -415,7 +415,7 @@ class ColorValidator(BaseValidator):
         },
     """
     re_hex = re.compile('#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})')
-    re_rgb_etc = re.compile('(rgb|hsl|hsv)a?\(\d{1,3}%?(,\d{1,3}%?){2,3}\)')
+    re_rgb_etc = re.compile('(rgb|hsl|hsv)a?\([\d.]{1,4}%?(,[\d.]{1,4}%?){2,3}\)')
 
     named_colors = [
         "aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige", "bisque", "black", "blanchedalmond",

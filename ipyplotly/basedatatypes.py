@@ -4,7 +4,6 @@ import uuid
 import ipywidgets as widgets
 from traitlets import List, Unicode, Dict, Tuple, default, observe
 
-
 @widgets.register
 class BaseFigureWidget(widgets.DOMWidget):
     # Constructor
@@ -13,9 +12,12 @@ class BaseFigureWidget(widgets.DOMWidget):
         super().__init__(**kwargs)
         # Initialize backing property for trace objects
         self._traces = ()
-        self._layout = {}
 
-    # Traits
+        from ipyplotly.datatypes import Layout
+        self._layout = Layout()
+        self._layout.parent = self
+
+        # Traits
     # ------
     _view_name = Unicode('FigureView').tag(sync=True)
     _view_module = Unicode('ipyplotly').tag(sync=True)
@@ -31,7 +33,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                              allow_none=True).tag(sync=True)
 
     _plotly_restyle = List(allow_none=True).tag(sync=True)
-    _plotly_relayout = Dict().tag(sync=True)
+    _plotly_relayout = Dict(allow_none=True).tag(sync=True)
 
     _plotly_deleteTraces = List(allow_none=True).tag(sync=True)
     _plotly_moveTraces = List(allow_none=True).tag(sync=True)
@@ -39,6 +41,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     # JS -> Python message properties
     _plotly_addTraceDeltas = List(allow_none=True).tag(sync=True)
     _plotly_restylePython = List(allow_none=True).tag(sync=True)
+    _plotly_relayoutPython = Dict(allow_none=True).tag(sync=True)
 
     # ### Trait methods ###
     @default('_plotly_addTraces')
@@ -248,13 +251,22 @@ class BaseFigureWidget(widgets.DOMWidget):
     @layout.setter
     def layout(self, new_layout):
         # TODO: validate layout
+        self._layout_data = new_layout._data
+
+        # Unparent current layout
+        if self._layout:
+            self._layout.parent = None
+
+        # Parent new layout
+        new_layout.parent = self
         self._layout = new_layout
 
     def _relayout_child(self, child, prop, val):
-        send_val = [val]
+        send_val = val  # Don't wrap in a list for relayout
         self._send_relayout_msg({prop: send_val})
 
     def _send_relayout_msg(self, layout):
+        print('relayout: {layout}'.format(layout=layout))
         self._plotly_relayout = layout
         self._plotly_relayout = None
 
@@ -346,18 +358,23 @@ class BasePlotlyType:
         raise NotImplementedError()
 
     def _update_child(self, child, prop, val):
-
         child_prop_val = getattr(self, child.type_name)
         if isinstance(child_prop_val, (list, tuple)):
             child_ind = child_prop_val.index(child)
-            restyle_path = '{child_name}.{child_ind}.{prop}'.format(
+            obj_path = '{child_name}.{child_ind}.{prop}'.format(
                 child_name=child.type_name,
                 child_ind=child_ind,
                 prop=prop)
         else:
-            restyle_path = '{child_name}.{prop}'.format(child_name=child.type_name, prop=prop)
+            obj_path = '{child_name}.{prop}'.format(child_name=child.type_name, prop=prop)
 
-        self._send_update(restyle_path, val)
+        self._send_update(obj_path, val)
+
+    def _restyle_child(self, child, prop, val):
+        self._update_child(child, prop, val)
+
+    def _relayout_child(self, child, prop, val):
+        self._update_child(child, prop, val)
 
 
 class BaseTraceType(BasePlotlyType):
@@ -366,13 +383,8 @@ class BaseTraceType(BasePlotlyType):
         super().__init__(type_name)
 
     def _send_update(self, prop, val):
-        self._send_restyle(prop, val)
-
-    def _send_restyle(self, prop, val):
         if self.parent:
-            self.parent._update_child(self, prop, val)
-
-
+            self.parent._restyle_child(self, prop, val)
 
 
 class BaseLayoutType(BasePlotlyType):
@@ -382,8 +394,5 @@ class BaseLayoutType(BasePlotlyType):
         super().__init__(type_name)
 
     def _send_update(self, prop, val):
-        pass
-
-    def _send_relayout(self, prop, val):
         if self.parent:
             self.parent._relayout_child(self, prop, val)

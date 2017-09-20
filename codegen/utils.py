@@ -23,7 +23,7 @@ class PlotlyNode:
         # Compute children
         if isinstance(self.node_data, dict):
             self._children = [self.__class__(self.plotly_schema, self.trace_path + (c,), parent=self)
-                              for c in self.node_data]
+                              for c in self.node_data if c and c[0] != '_']
         else:
             self._children = []
 
