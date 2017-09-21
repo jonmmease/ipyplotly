@@ -117,10 +117,6 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
 
         buffer.write(f"""
         super().__init__('{compound_node.name_property}')
-
-        # Initialize data dict
-        # --------------------
-        self._data['type'] = '{compound_node.dir_str}'
         
         # Initialize validators
         # ---------------------""")

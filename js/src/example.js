@@ -25,6 +25,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
         // JS -> Python
         _plotly_addTraceDeltas: null,
+        _plotly_relayoutDelta: null,
         _plotly_restylePython: null,
         _plotly_relayoutPython: null
     }),
@@ -109,8 +110,10 @@ var FigureView = widgets.DOMWidgetView.extend({
 
         // Clone traces and layout so plotly instances in the views don't mutate the model
         var initial_traces = JSON.parse(JSON.stringify(this.model.get('_traces_data')));
-        var initial_layout = JSON.parse(JSON.stringify(this.model.get('_layout_data')));
-        Plotly.plot(this.el, initial_traces, initial_layout);
+        Plotly.plot(this.el, initial_traces);
+
+        var layout_data = this.clone_fullLayout_data(this.el._fullLayout);
+        this.model.set('_layout_data', layout_data);
 
         // Python -> JS event properties
         this.model.on('change:_plotly_addTraces', this.do_addTraces, this);
@@ -127,6 +130,9 @@ var FigureView = widgets.DOMWidgetView.extend({
         // Plotly events
         var that = this;
         this.el.on('plotly_restyle', function(update, inds) {that.handle_restyle(update, inds)});
+
+        // sync any/all changes back to model
+        this.touch();
     },
 
     handle_restyle: function (data) {
@@ -157,6 +163,11 @@ var FigureView = widgets.DOMWidgetView.extend({
             }
 
             this.model.set('_plotly_addTraceDeltas', traceDeltas);
+
+            // Update layout
+            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
+            this.model.set('_plotly_relayoutDelta', relayoutDelta);
+
             this.touch();
         }
     },
@@ -167,6 +178,10 @@ var FigureView = widgets.DOMWidgetView.extend({
         if (delete_inds !== null){
             console.log(delete_inds);
             Plotly.deleteTraces(this.el, delete_inds)
+
+            // Update layout
+            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
+            this.model.set('_plotly_relayoutDelta', relayoutDelta);
         }
     },
 
@@ -216,6 +231,11 @@ var FigureView = widgets.DOMWidgetView.extend({
             }
 
             this.model.set('_plotly_addTraceDeltas', traceDeltas);
+
+            // Update layout
+            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
+            this.model.set('_plotly_relayoutDelta', relayoutDelta);
+
             this.touch();
         }
     },
@@ -226,7 +246,21 @@ var FigureView = widgets.DOMWidgetView.extend({
         if (data !== null) {
             console.log(data);
             Plotly.relayout(this.el, data);
+
+            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
+            this.model.set('_plotly_relayoutDelta', relayoutDelta);
+            this.touch();
         }
+    },
+
+    clone_fullLayout_data: function (fullLayout) {
+        var fullStr = JSON.stringify(fullLayout, function(k, v) {
+            if (k.length > 0 && k[0] === '_') {
+                return undefined
+            }
+            return v
+        });
+        return JSON.parse(fullStr)
     },
 
     clone_fullData_metadata: function (fullData) {
@@ -246,7 +280,15 @@ var FigureView = widgets.DOMWidgetView.extend({
         var res = {};
         for (var p in data) {
             if (data.hasOwnProperty(p) && p in fullData && fullData[p] !== null)
-                if (data[p] !== fullData[p] || p === 'uid') {  // Let uids through
+
+                var props_equal;
+                if (Array.isArray(data[p]) && Array.isArray(fullData[p])) {
+                    props_equal = JSON.stringify(data[p]) === JSON.stringify(fullData[p]);
+                } else {
+                    props_equal = data[p] === fullData[p];
+                }
+
+                if (!props_equal || p === 'uid') {  // Let uids through
                     // property has non-null value in fullData that doesn't match the value in
                     var full_val = fullData[p];
                     if (typeof full_val === 'object' && !Array.isArray(full_val)) {
@@ -255,7 +297,7 @@ var FigureView = widgets.DOMWidgetView.extend({
                             // new object is not empty
                             res[p] = full_obj;
                         }
-                    } else {
+                    } else if (full_val !== undefined){
                         res[p] = full_val;
                     }
                 }

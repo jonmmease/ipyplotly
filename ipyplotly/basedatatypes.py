@@ -6,18 +6,8 @@ from traitlets import List, Unicode, Dict, Tuple, default, observe
 
 @widgets.register
 class BaseFigureWidget(widgets.DOMWidget):
-    # Constructor
-    # -----------
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # Initialize backing property for trace objects
-        self._traces = ()
 
-        from ipyplotly.datatypes import Layout
-        self._layout = Layout()
-        self._layout.parent = self
-
-        # Traits
+    # Traits
     # ------
     _view_name = Unicode('FigureView').tag(sync=True)
     _view_module = Unicode('ipyplotly').tag(sync=True)
@@ -40,8 +30,18 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # JS -> Python message properties
     _plotly_addTraceDeltas = List(allow_none=True).tag(sync=True)
+    _plotly_relayoutDelta = Dict(allow_none=True).tag(sync=True)
     _plotly_restylePython = List(allow_none=True).tag(sync=True)
     _plotly_relayoutPython = Dict(allow_none=True).tag(sync=True)
+
+    # Constructor
+    # -----------
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # Initialize backing property for trace objects
+        self._traces = ()
+        self._layout = None
 
     # ### Trait methods ###
     @default('_plotly_addTraces')
@@ -244,6 +244,30 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # Layout
     # ------
+    @observe('_layout_data')
+    def handler_layout_data(self, change):
+        layout_data = change['new']
+        if not layout_data:
+            return
+
+        # print('New Layout Data: {msg}'.format(msg=layout_data))
+
+        from ipyplotly.datatypes import Layout
+        self.layout = Layout(**layout_data)
+
+    @observe('_plotly_relayoutDelta')
+    def handler_plotly_relayoutDelta(self, change):
+        delta = change['new']
+        # print('relayoutDelta msg: {deltas}'.format(deltas=delta))
+
+        if not delta:
+            return
+
+        BaseFigureWidget.apply_dict_delta(self.layout._data, delta)
+
+        # Remove processed trace delta data
+        self._plotly_relayoutDelta = None
+
     @property
     def layout(self):
         return self._layout
