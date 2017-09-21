@@ -16,7 +16,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     _model_module = Unicode('ipyplotly').tag(sync=True)
 
     # Data properties for front end
-    _layout_data = Dict().tag(sync=True)
+    _layout_data = Dict()  # .tag(sync=True)
     _traces_data = List().tag(sync=True)
 
     # Python -> JS message properties
@@ -30,7 +30,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     _plotly_moveTraces = List(allow_none=True).tag(sync=True)
 
     # JS -> Python message properties
-    _plotly_addTraceDeltas = List(allow_none=True).tag(sync=True)
+    _plotly_restyleDelta = List(allow_none=True).tag(sync=True)
     _plotly_relayoutDelta = Dict(allow_none=True).tag(sync=True)
     _plotly_restylePython = List(allow_none=True).tag(sync=True)
     _plotly_relayoutPython = Dict(allow_none=True).tag(sync=True)
@@ -58,8 +58,8 @@ class BaseFigureWidget(widgets.DOMWidget):
     def _plotly_restyle_default(self):
         return None
 
-    @observe('_plotly_addTraceDeltas')
-    def handler_plotly_addTraceDeltas(self, change):
+    @observe('_plotly_restyleDelta')
+    def handler_plotly_restyleDelta(self, change):
         deltas = change['new']
         if not deltas:
             return
@@ -73,7 +73,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             BaseFigureWidget.apply_dict_delta(uid_trace._data, delta)
 
         # Remove processed trace delta data
-        self._plotly_addTraceDeltas = None
+        self._plotly_restyleDelta = None
 
     @observe('_plotly_restylePython')
     def handler_plotly_restylePython(self, change):
@@ -173,7 +173,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         for raw_key, v in style.items():
             # kstr may have periods. e.g. foo.bar
-            key_path = self.str_to_dict_path(raw_key)
+            key_path = self._str_to_dict_path(raw_key)
 
             if not isinstance(v, list):
                 v = [v]
@@ -301,7 +301,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         for raw_key, v in relayout_data.items():
             # kstr may have periods. e.g. foo.bar
-            key_path = self.str_to_dict_path(raw_key)
+            key_path = self._str_to_dict_path(raw_key)
 
             val_parent = self._layout_data
             for key_path_el in key_path[:-1]:
@@ -315,20 +315,21 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         return relayout_msg
 
-    def str_to_dict_path(self, raw_key):
+    @staticmethod
+    def _str_to_dict_path(raw_key):
 
-        # split string on periods. e.g. 'foo.bar[0]' -> ['foo', 'bar[0]']
+        # Split string on periods. e.g. 'foo.bar[0]' -> ['foo', 'bar[0]']
         key_path = raw_key.split('.')
 
         # Split out bracket indexes. e.g. ['foo', 'bar[0]'] -> ['foo', 'bar', '0']
-        bracket_re = re.compile('(?P<key>.*)\[(?P<ind>\d+)\]')
+        bracket_re = re.compile('(.*)\[(\d+)\]')
         key_path2 = []
-        for k in key_path:
-            match = bracket_re.fullmatch(k)
+        for key in key_path:
+            match = bracket_re.fullmatch(key)
             if match:
                 key_path2.extend(match.groups())
             else:
-                key_path2.append(k)
+                key_path2.append(key)
 
         # Convert elements to ints if possible. e.g. e.g. ['foo', 'bar', '0'] -> ['foo', 'bar', 0]
         for i in range(len(key_path2)):

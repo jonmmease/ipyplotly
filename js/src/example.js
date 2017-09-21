@@ -14,7 +14,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         _view_module: 'ipyplotly',
 
         _traces_data: [],
-        _layout_data: {},
+        _layout_data: {}, // Not synced to python side
 
         // Message properties
         _plotly_addTraces: null,
@@ -24,8 +24,6 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         _plotly_relayout:null,
 
         // JS -> Python
-        _plotly_addTraceDeltas: null,
-        _plotly_relayoutDelta: null,
         _plotly_restylePython: null,
         _plotly_relayoutPython: null
     }),
@@ -57,6 +55,36 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         }
     },
 
+    _str_to_dict_path: function (rawKey) {
+
+        // Split string on periods. e.g. 'foo.bar[0]' -> ['foo', 'bar[0]']
+        var keyPath = rawKey.split('.');
+        var regex = /(.*)\[(\d+)\]/;
+
+        // Split out bracket indexes. e.g. ['foo', 'bar[0]'] -> ['foo', 'bar', '0']
+        var keyPath2 = [];
+        for (var k = 0; k < keyPath.length; k++) {
+            var key = keyPath[k];
+            var match = regex.exec(key);
+            if (match === null) {
+                keyPath2.push(key);
+            } else {
+                keyPath2.push(match[1]);
+                keyPath2.push(match[2]);
+            }
+        }
+
+        // Convert elements to ints if possible. e.g. e.g. ['foo', 'bar', '0'] -> ['foo', 'bar', 0]
+        for (k = 0; k < keyPath2.length; k++) {
+            key = keyPath2[k];
+            var potentialInt = parseInt(key);
+            if (!isNaN(potentialInt)) {
+                keyPath2[k] = potentialInt;
+            }
+        }
+        return keyPath2
+    },
+
     _performRestyle: function (style, trace_indexes){
 
         // Make sure trace_indexes is an array
@@ -72,7 +100,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
                 v = [v]
             }
 
-            var keyPath = rawKey.split('.');
+            var keyPath = this._str_to_dict_path(rawKey);
 
             for (var i = 0; i < trace_indexes.length; i++) {
                 var trace_ind = trace_indexes[i];
@@ -83,17 +111,62 @@ var FigureModel = widgets.DOMWidgetModel.extend({
                     trace_data = trace_data[keyPathEl];
                 }
 
-                var lasKey = keyPath[keyPath.length-1];
+                var lastKey = keyPath[keyPath.length-1];
                 var trace_v = v[i % v.length];
 
-                trace_data[lasKey] = trace_v;
+                trace_data[lastKey] = trace_v;
             }
         }
     },
 
     do_relayout: function () {
         console.log('FigureModel: do_relayout');
-        var data = this.get('_plotly_relayout');
+        var relayout_data = this.get('_plotly_relayout');
+
+        if (relayout_data !== null) {
+            this._performRelayout(relayout_data);
+        }
+    },
+
+    _performRelayout: function (relayout_data){
+
+        // Make sure trace_indexes is an array
+        for (var rawKey in relayout_data) {
+            if (!relayout_data.hasOwnProperty(rawKey)) { continue }
+            var v = relayout_data[rawKey];
+
+            var keyPath = this._str_to_dict_path(rawKey);
+
+            var val_parent = this.get('_layout_data');
+
+            for (var kp = 0; kp < keyPath.length-1; kp++) {
+                var keyPathEl = keyPath[kp];
+                var val_child = val_parent[keyPathEl];
+                if (val_child === null || val_child === undefined) {
+                    // We need to create the child
+                    if (Number.isInteger(keyPath[kp+1])) {
+                        // Child is an array
+                        val_child = [];
+                    } else {
+                        // Child is an object
+                        val_child = {};
+                    }
+
+                    val_parent[keyPathEl] = val_child
+                }
+                val_parent = val_child
+            }
+
+            var lastKey = keyPath[keyPath.length-1];
+
+            // Check if we need to extend array
+            if (Array.isArray(val_parent) && Number.isInteger(lastKey) && lastKey >= val_parent.length) {
+                while (val_parent.length <= lastKey) {
+                    val_parent.push(null);
+                }
+            }
+            val_parent[lastKey] = v;
+        }
     }
 });
 
@@ -107,14 +180,20 @@ var FigureView = widgets.DOMWidgetView.extend({
         // Initialize empty figure
         console.log('render');
         console.log(this.model.get('_traces_data'));
+        console.log(this.model.get('_layout_data'));
 
         // Clone traces and layout so plotly instances in the views don't mutate the model
         var initial_traces = JSON.parse(JSON.stringify(this.model.get('_traces_data')));
-        Plotly.plot(this.el, initial_traces);
+        var initial_layout = JSON.parse(JSON.stringify(this.model.get('_layout_data')));
+        Plotly.plot(this.el, initial_traces, initial_layout);
 
-        var layout_data = this.clone_fullLayout_data(this.el._fullLayout);
-        this.model.set('_plotly_relayoutDelta', layout_data);
-        this.touch();
+        // Update layout
+        var fullLayoutData = this.clone_fullLayout_data(this.el._fullLayout);
+
+        this.model.set('_plotly_relayoutDelta', fullLayoutData);
+
+        var layoutData = this.clone_fullLayout_data(this.el.layout);
+        this.model.set('_layout_data', layoutData);
 
         // Python -> JS event properties
         this.model.on('change:_plotly_addTraces', this.do_addTraces, this);
@@ -171,11 +250,16 @@ var FigureView = widgets.DOMWidgetView.extend({
                 traceDeltas[i] = this.create_delta_object(traceData, fullTraceData);
             }
 
-            this.model.set('_plotly_addTraceDeltas', traceDeltas);
+            this.model.set('_plotly_restyleDelta', traceDeltas);
 
             // Update layout
-            var layout_data = this.clone_fullLayout_data(this.el._fullLayout);
-            this.model.set('_plotly_relayoutDelta', layout_data);
+            var fullLayoutData = this.clone_fullLayout_data(this.el._fullLayout);
+            this.model.set('_plotly_relayoutDelta', fullLayoutData);
+
+            var layoutData = this.clone_fullLayout_data(this.el.layout);
+            console.log('layout data:');
+            console.log(layoutData);
+            this.model.set('_layout_data', layoutData);
             this.touch();
         }
     },
@@ -239,7 +323,7 @@ var FigureView = widgets.DOMWidgetView.extend({
                 traceDeltas[i] = this.create_delta_object(fullDataPres[i], this.el._fullData[idx[i]]);
             }
 
-            this.model.set('_plotly_addTraceDeltas', traceDeltas);
+            this.model.set('_plotly_restyleDelta', traceDeltas);
 
             // Update layout
             var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
