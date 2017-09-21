@@ -91,14 +91,37 @@ class EnumeratedValidator(BaseValidator):
         self.coerce_number = coerce_number
         self.default = dflt
         self.values = values
+
+        # compile regexes
+        self.val_regexs = []
+        for v in self.values:
+            if v and isinstance(v, str) and v[0] == '/' and v[-1] == '/':
+                # String is regex with leading and trailing '/' character
+                self.val_regexs.append(re.compile(v[1:-1]))
+            else:
+                self.val_regexs.append(None)
+
         self.array_ok = array_ok
+
+    def in_values(self, e):
+        is_str = isinstance(e, str)
+        for v, regex in zip(self.values, self.val_regexs):
+            if is_str and regex:
+                in_values = regex.fullmatch(e) is not None
+            else:
+                in_values = e == v
+
+            if in_values:
+                return True
+
+        return False
 
     def validate_coerce(self, v):
         if v is None:
             v = self.default
 
         elif self.array_ok and DataArrayValidator.is_array(v):
-            invalid_els = [e for e in v if (not isinstance(e, collections.Hashable)) or (e not in self.values)]
+            invalid_els = [e for e in v if (not self.in_values(e))]
             if invalid_els:
                 valid_str = '\n'.join(textwrap.wrap(repr(self.values),
                                                     subsequent_indent=' ' * 8,
@@ -114,7 +137,7 @@ class EnumeratedValidator(BaseValidator):
                     valid_str=valid_str
                 ))
         else:
-            if v not in self.values:
+            if not self.in_values(v):
                 valid_str = '\n'.join(textwrap.wrap(repr(self.values),
                                                     subsequent_indent=' ' * 8,
                                                     break_on_hyphens=False))

@@ -1,5 +1,6 @@
 import collections
 import uuid
+import re
 
 import ipywidgets as widgets
 from traitlets import List, Unicode, Dict, Tuple, default, observe
@@ -42,6 +43,11 @@ class BaseFigureWidget(widgets.DOMWidget):
         # Initialize backing property for trace objects
         self._traces = ()
         self._layout = None
+
+        from ipyplotly.datatypes import Layout
+        self._layout = Layout()
+        self._layout.parent = self
+        self._layout_data = self._layout._data
 
     # ### Trait methods ###
     @default('_plotly_addTraces')
@@ -167,13 +173,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         for raw_key, v in style.items():
             # kstr may have periods. e.g. foo.bar
-            key_path = raw_key.split('.')
-            for i in range(len(key_path)):
-                try:
-                    # Convert elements to ints if possible
-                    key_path[i] = int(key_path[i])
-                except ValueError as _:
-                    pass
+            key_path = self.str_to_dict_path(raw_key)
 
             if not isinstance(v, list):
                 v = [v]
@@ -244,25 +244,14 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # Layout
     # ------
-    @observe('_layout_data')
-    def handler_layout_data(self, change):
-        layout_data = change['new']
-        if not layout_data:
-            return
-
-        # print('New Layout Data: {msg}'.format(msg=layout_data))
-
-        from ipyplotly.datatypes import Layout
-        self.layout = Layout(**layout_data)
-
     @observe('_plotly_relayoutDelta')
     def handler_plotly_relayoutDelta(self, change):
         delta = change['new']
-        # print('relayoutDelta msg: {deltas}'.format(deltas=delta))
 
         if not delta:
             return
 
+        # print('relayoutDelta msg: {deltas}'.format(deltas=delta))
         BaseFigureWidget.apply_dict_delta(self.layout._data, delta)
 
         # Remove processed trace delta data
@@ -290,9 +279,65 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._send_relayout_msg({prop: send_val})
 
     def _send_relayout_msg(self, layout):
-        print('relayout: {layout}'.format(layout=layout))
+        # print('relayout: {layout}'.format(layout=layout))
         self._plotly_relayout = layout
         self._plotly_relayout = None
+
+    @observe('_plotly_relayoutPython')
+    def handler_plotly_relayoutPython(self, change):
+        relayout_data = change['new']
+        if not relayout_data:
+            return
+
+        self.relayout(relayout_data)
+
+    def relayout(self, relayout_data):
+        relayout_msg = self._perform_relayout(relayout_data)
+        if relayout_msg:
+            self._send_relayout_msg(relayout_msg)
+
+    def _perform_relayout(self, relayout_data):
+        relayout_msg = {}  # relayout data to send to JS side as Plotly.relayout()
+
+        for raw_key, v in relayout_data.items():
+            # kstr may have periods. e.g. foo.bar
+            key_path = self.str_to_dict_path(raw_key)
+
+            val_parent = self._layout_data
+            for key_path_el in key_path[:-1]:
+                val_parent = val_parent[key_path_el]
+
+            last_key = key_path[-1]
+            # print(f'{key_path}, {last_key}, {v}')
+            if last_key not in val_parent or val_parent[last_key] != v:
+                val_parent[last_key] = v
+                relayout_msg[raw_key] = v
+
+        return relayout_msg
+
+    def str_to_dict_path(self, raw_key):
+
+        # split string on periods. e.g. 'foo.bar[0]' -> ['foo', 'bar[0]']
+        key_path = raw_key.split('.')
+
+        # Split out bracket indexes. e.g. ['foo', 'bar[0]'] -> ['foo', 'bar', '0']
+        bracket_re = re.compile('(?P<key>.*)\[(?P<ind>\d+)\]')
+        key_path2 = []
+        for k in key_path:
+            match = bracket_re.fullmatch(k)
+            if match:
+                key_path2.extend(match.groups())
+            else:
+                key_path2.append(k)
+
+        # Convert elements to ints if possible. e.g. e.g. ['foo', 'bar', '0'] -> ['foo', 'bar', 0]
+        for i in range(len(key_path2)):
+            try:
+                key_path2[i] = int(key_path2[i])
+            except ValueError as _:
+                pass
+
+        return key_path2
 
     # Static helpers
     # --------------

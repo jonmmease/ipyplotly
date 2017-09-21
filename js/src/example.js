@@ -113,7 +113,8 @@ var FigureView = widgets.DOMWidgetView.extend({
         Plotly.plot(this.el, initial_traces);
 
         var layout_data = this.clone_fullLayout_data(this.el._fullLayout);
-        this.model.set('_layout_data', layout_data);
+        this.model.set('_plotly_relayoutDelta', layout_data);
+        this.touch();
 
         // Python -> JS event properties
         this.model.on('change:_plotly_addTraces', this.do_addTraces, this);
@@ -129,7 +130,8 @@ var FigureView = widgets.DOMWidgetView.extend({
 
         // Plotly events
         var that = this;
-        this.el.on('plotly_restyle', function(update, inds) {that.handle_restyle(update, inds)});
+        this.el.on('plotly_restyle', function(update) {that.handle_restyle(update)});
+        this.el.on('plotly_relayout', function(update) {that.handle_relayout(update)});
 
         // sync any/all changes back to model
         this.touch();
@@ -139,6 +141,13 @@ var FigureView = widgets.DOMWidgetView.extend({
         console.log("plotly_restyle");
         console.log(data);
         this.model.set('_plotly_restylePython', data);
+        this.touch();
+    },
+
+    handle_relayout: function (data) {
+        console.log("plotly_relayout");
+        console.log(data);
+        this.model.set('_plotly_relayoutPython', data);
         this.touch();
     },
 
@@ -165,9 +174,8 @@ var FigureView = widgets.DOMWidgetView.extend({
             this.model.set('_plotly_addTraceDeltas', traceDeltas);
 
             // Update layout
-            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
-            this.model.set('_plotly_relayoutDelta', relayoutDelta);
-
+            var layout_data = this.clone_fullLayout_data(this.el._fullLayout);
+            this.model.set('_plotly_relayoutDelta', layout_data);
             this.touch();
         }
     },
@@ -177,11 +185,12 @@ var FigureView = widgets.DOMWidgetView.extend({
         console.log('do_deleteTraces');
         if (delete_inds !== null){
             console.log(delete_inds);
-            Plotly.deleteTraces(this.el, delete_inds)
+            Plotly.deleteTraces(this.el, delete_inds);
 
             // Update layout
             var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
             this.model.set('_plotly_relayoutDelta', relayoutDelta);
+            this.touch();
         }
     },
 
