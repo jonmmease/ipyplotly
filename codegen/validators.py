@@ -44,7 +44,7 @@ class {datatype_node.name_validator}(bv.{datatype_node.datatype_pascal_case}Vali
             assert datatype_node.is_simple
 
             attr_nodes = [n for n in datatype_node.simple_attrs
-                          if n.name not in ['valType', 'description', 'role']]
+                          if n.name not in ['valType', 'description', 'role', 'dflt']]
             for i, attr_node in enumerate(attr_nodes):
                 buffer.write(f""",
                          {attr_node.name_undercase}={repr(attr_node.node_data)}""")

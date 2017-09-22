@@ -33,7 +33,6 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         console.log('FigureModel: initialize');
 
         this.on("change:_plotly_restyle", this.do_restyle, this);
-        this.on("change:_plotly_relayout", this.do_relayout, this);
     },
 
     do_restyle: function () {
@@ -116,56 +115,6 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
                 trace_data[lastKey] = trace_v;
             }
-        }
-    },
-
-    do_relayout: function () {
-        console.log('FigureModel: do_relayout');
-        var relayout_data = this.get('_plotly_relayout');
-
-        if (relayout_data !== null) {
-            this._performRelayout(relayout_data);
-        }
-    },
-
-    _performRelayout: function (relayout_data){
-
-        // Make sure trace_indexes is an array
-        for (var rawKey in relayout_data) {
-            if (!relayout_data.hasOwnProperty(rawKey)) { continue }
-            var v = relayout_data[rawKey];
-
-            var keyPath = this._str_to_dict_path(rawKey);
-
-            var val_parent = this.get('_layout_data');
-
-            for (var kp = 0; kp < keyPath.length-1; kp++) {
-                var keyPathEl = keyPath[kp];
-                var val_child = val_parent[keyPathEl];
-                if (val_child === null || val_child === undefined) {
-                    // We need to create the child
-                    if (Number.isInteger(keyPath[kp+1])) {
-                        // Child is an array
-                        val_child = [];
-                    } else {
-                        // Child is an object
-                        val_child = {};
-                    }
-
-                    val_parent[keyPathEl] = val_child
-                }
-                val_parent = val_child
-            }
-
-            var lastKey = keyPath[keyPath.length-1];
-
-            // Check if we need to extend array
-            if (Array.isArray(val_parent) && Number.isInteger(lastKey) && lastKey >= val_parent.length) {
-                while (val_parent.length <= lastKey) {
-                    val_parent.push(null);
-                }
-            }
-            val_parent[lastKey] = v;
         }
     }
 });
@@ -250,15 +199,13 @@ var FigureView = widgets.DOMWidgetView.extend({
                 traceDeltas[i] = this.create_delta_object(traceData, fullTraceData);
             }
 
-            this.model.set('_plotly_restyleDelta', traceDeltas);
+            // this.model.set('_plotly_restyleDelta', traceDeltas);
 
             // Update layout
             var fullLayoutData = this.clone_fullLayout_data(this.el._fullLayout);
             this.model.set('_plotly_relayoutDelta', fullLayoutData);
 
             var layoutData = this.clone_fullLayout_data(this.el.layout);
-            console.log('layout data:');
-            console.log(layoutData);
             this.model.set('_layout_data', layoutData);
             this.touch();
         }
@@ -323,7 +270,7 @@ var FigureView = widgets.DOMWidgetView.extend({
                 traceDeltas[i] = this.create_delta_object(fullDataPres[i], this.el._fullData[idx[i]]);
             }
 
-            this.model.set('_plotly_restyleDelta', traceDeltas);
+            // this.model.set('_plotly_restyleDelta', traceDeltas);
 
             // Update layout
             var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
@@ -342,6 +289,10 @@ var FigureView = widgets.DOMWidgetView.extend({
 
             var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
             this.model.set('_plotly_relayoutDelta', relayoutDelta);
+
+            var layoutData = this.clone_fullLayout_data(this.el.layout);
+            this.model.set('_layout_data', layoutData);
+
             this.touch();
         }
     },

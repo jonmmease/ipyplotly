@@ -5,6 +5,19 @@ import re
 import ipywidgets as widgets
 from traitlets import List, Unicode, Dict, Tuple, default, observe
 
+# TODO:
+#  - Traces:
+#    - keep defaults on Python side.  Add JS -> Python deltas to a separate dict and chain map them together.
+#       This way new views match existing, including default behavior, and python side sees current values
+#
+#  - Layout
+#    - Two dicts on Python side (layout and fullLayout)
+#       - layout is things explicitly set, fullLayout is synced from JS side with other defaults
+#       - layout is synced to JS side on construction and updated on relayout commands on both sides
+#
+#
+#  Rework _data system to support chain dict. Reference to top level dictionary with key path to self?
+#
 @widgets.register
 class BaseFigureWidget(widgets.DOMWidget):
 
@@ -16,7 +29,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     _model_module = Unicode('ipyplotly').tag(sync=True)
 
     # Data properties for front end
-    _layout_data = Dict()  # .tag(sync=True)
+    _layout_data = Dict().tag(sync=True)
     _traces_data = List().tag(sync=True)
 
     # Python -> JS message properties

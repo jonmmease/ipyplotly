@@ -148,8 +148,8 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
 
 def add_constructor_params(buffer, compound_node, colon=True):
     for i, subtype_node in enumerate(compound_node.child_datatypes):
-        # under_name = subtype_node.name_property
-        dflt = subtype_node.node_data.get('dflt', None)
+        # dflt = subtype_node.node_data.get('dflt', None)
+        dflt = None
         is_last = i == len(compound_node.child_datatypes) - 1
         buffer.write(f""",
             {subtype_node.name_property}={repr(dflt)}""")
