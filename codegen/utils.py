@@ -114,6 +114,10 @@ class PlotlyNode:
         return isinstance(self.node_data, dict) and not self.is_simple
 
     @property
+    def is_literal(self) -> bool:
+        return isinstance(self.node_data, str)
+
+    @property
     def is_simple(self) -> bool:
         return isinstance(self.node_data, dict) and 'valType' in self.node_data
 
@@ -212,6 +216,10 @@ class PlotlyNode:
     @property
     def child_simple_datatypes(self) -> List['PlotlyNode']:
         return [n for n in self.child_datatypes if n.is_simple]
+
+    @property
+    def child_literals(self) -> List['PlotlyNode']:
+        return [n for n in self.children if n.is_literal]
 
     # Static helpers
     # --------------

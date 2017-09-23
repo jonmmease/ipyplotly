@@ -54,6 +54,9 @@ def build_datatypes_py(parent_node: PlotlyNode):
     # -----------------------
     for compound_node in compound_nodes:
 
+        # grab literals
+        literal_nodes = [n for n in compound_node.child_literals if n.name in ['type']]
+
         # ### Class definition ###
         buffer.write(f"""
 
@@ -108,6 +111,17 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         self._{subtype_node.name_property} = self.{prop_set_method}('{subtype_node.name_property}', val, 
         self._{subtype_node.name_property})\n""")
 
+
+        # ### Literals ###
+        for literal_node in literal_nodes:
+            buffer.write(f"""\
+
+    # {literal_node.name_property}
+    # {'-' * len(literal_node.name_property)}
+    @property
+    def {literal_node.name_property}(self) -> {prop_type}:
+        return self._get_prop('{literal_node.name_property}')\n""")
+
         # ### Constructor ###
         buffer.write(f"""
     def __init__(self""")
@@ -142,6 +156,17 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         for subtype_node in compound_node.child_datatypes:
             buffer.write(f"""
         self.{subtype_node.name_property} = {subtype_node.name_property}""")
+
+        # ### Literals ###
+        literal_nodes = [n for n in compound_node.child_literals if n.name in ['type']]
+        if literal_nodes:
+            buffer.write(f"""
+
+        # Read-only literals
+        # ------------------""")
+            for literal_node in literal_nodes:
+                buffer.write(f"""
+        self._data['{literal_node.name_property}'] = '{literal_node.node_data}'""")
 
     return buffer.getvalue()
 
