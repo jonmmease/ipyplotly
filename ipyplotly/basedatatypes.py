@@ -228,7 +228,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             trace_indexes = [trace_indexes]
 
         restype_msg = (style, trace_indexes)
-        # print('Restyle: {msg}'.format(msg=restype_msg))
+        print('Restyle: {msg}\n type: {typ}'.format(msg=restype_msg, typ=type(restype_msg)))
         self._plotly_restyle = restype_msg
         self._plotly_restyle = None
 
@@ -276,6 +276,10 @@ class BaseFigureWidget(widgets.DOMWidget):
             return self._layout_data
         else:
             raise ValueError('Unrecognized child: %s' % child)
+
+    def _init_child_data(self, child):
+        # layout and traces dict are never None
+        return
 
     # Layout
     # ------
@@ -424,28 +428,48 @@ class BasePlotlyType:
             # Get data from parent's dict
             return self.parent._get_child_data(self)
 
+    def _init_data(self):
+        # Ensure that _data is initialized.
+        if self._data is not None:
+            pass
+        else:
+            self._parent._init_child_data(self)
+
+    def _init_child_data(self, child):
+        self.parent._init_child_data(self)
+        self_data = self.parent._get_child_data(self)
+        if child.type_name not in self_data:
+            self_data[child.type_name] = {}
+
     @property
     def parent(self):
         return self._parent
 
     def _get_child_data(self, child):
         self_data = self.parent._get_child_data(self)
-        return self_data[child.type_name]
+        return None if not self_data else self_data.get(child.type_name, None)
 
     def _set_prop(self, prop, val):
         validator = self._validators.get(prop)
         val = validator.validate_coerce(val)
 
-        if prop not in self._data or self._data[prop] != val:
-            self._data[prop] = val
-            self._send_update(prop, val)
+        if val is None:
+            # Check if we should send null update
+            if self._data and prop in self._data:
+                self._data.pop(prop)
+                self._send_update(prop, val)
+        else:
+            self._init_data()
+            if prop not in self._data or self._data[prop] != val:
+                self._data[prop] = val
+                self._send_update(prop, val)
 
     def _set_compound_prop(self, prop, val, curr_val: 'BasePlotlyType'):
         # Validate coerce new value
         validator = self._validators.get(prop)
         val = validator.validate_coerce(val)  # type: BasePlotlyType
 
-        # Update data dict
+        # Grab deep copies of current and new states
         if curr_val is not None:
             curr_dict_val = deepcopy(curr_val._data)
         else:
@@ -456,7 +480,12 @@ class BasePlotlyType:
         else:
             new_dict_val = None
 
-        self._data[prop] = new_dict_val
+        # Update data dict
+        if not new_dict_val:
+            if prop in self._data:
+                self._data.pop(prop)
+        else:
+            self._data[prop] = new_dict_val
 
         # Send update if there was a change in value
         if curr_dict_val != new_dict_val:

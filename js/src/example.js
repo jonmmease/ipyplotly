@@ -107,6 +107,9 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
                 for (var kp = 0; kp < keyPath.length-1; kp++) {
                     var keyPathEl = keyPath[kp];
+                    if (trace_data[keyPathEl] === undefined) {
+                        trace_data[keyPathEl] = {}
+                    }
                     trace_data = trace_data[keyPathEl];
                 }
 
