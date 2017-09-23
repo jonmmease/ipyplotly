@@ -1,10 +1,11 @@
 import collections
 import uuid
 import re
+from copy import copy, deepcopy
 
 import ipywidgets as widgets
 from traitlets import List, Unicode, Dict, Tuple, default, observe
-
+import typing as typ
 # TODO:
 #  - Traces:
 #    - keep defaults on Python side.  Add JS -> Python deltas to a separate dict and chain map them together.
@@ -54,12 +55,12 @@ class BaseFigureWidget(widgets.DOMWidget):
         super().__init__(**kwargs)
 
         # Initialize backing property for trace objects
-        self._traces = ()
+        self._traces = ()  # type: typ.Tuple[BaseTraceType]
         self._layout = None
 
         from ipyplotly.datatypes import Layout
         self._layout = Layout()
-        self._layout.parent = self
+        self._layout._parent = self
         self._layout_data = self._layout._data
 
     # ### Trait methods ###
@@ -106,7 +107,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     # Traces
     # ------
     @property
-    def traces(self):
+    def traces(self) -> typ.Tuple['BaseTraceType']:
         return self._traces
 
     @traces.setter
@@ -139,7 +140,9 @@ class BaseFigureWidget(widgets.DOMWidget):
                 remove_inds.append(i)
 
                 # Unparent trace object to be removed
-                self.traces[i].parent = None
+                old_trace = self.traces[i]
+                old_trace._orphan_data.update(deepcopy(self.traces[i]._data))
+                old_trace._parent = None
 
         # Compute trace data list after removal
         traces_data_post_removal = [t for t in self._traces_data]
@@ -237,23 +240,42 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         self._send_restyle_msg({prop: send_val}, trace_indexes=trace_index)
 
-
-    def _add_trace(self, trace):
+    def _add_trace(self, trace: 'BaseTraceType'):
 
         # Add UID if not set
         if not trace._data.get('uid', None):
             trace._data['uid'] = str(uuid.uuid1())
 
+        # Make deep copy of trace data (Optimize later if needed)
+        new_trace_data = deepcopy(trace._data)
+
+        # Update trace parent
+        trace._parent = self
+        trace._orphan_data.clear()
+
         # Update python side
-        self._traces_data = self._traces_data + [trace._data]
-        self.traces = self.traces + (trace,)
+        self._traces_data = self._traces_data + [new_trace_data]
+        self._traces = self._traces + (trace,)
 
         # Send to front end
-        add_traces_msg = [trace._data]
+        add_traces_msg = [new_trace_data]
         self._plotly_addTraces = add_traces_msg
         self._plotly_addTraces = None
 
         return trace
+
+    def _get_child_data(self, child):
+        try:
+            trace_index = self.traces.index(child)
+        except ValueError as _:
+            trace_index = None
+
+        if trace_index is not None:
+            return self._traces_data[trace_index]
+        elif child is self.layout:
+            return self._layout_data
+        else:
+            raise ValueError('Unrecognized child: %s' % child)
 
     # Layout
     # ------
@@ -388,9 +410,27 @@ class BaseFigureWidget(widgets.DOMWidget):
 class BasePlotlyType:
     def __init__(self, type_name):
         self.type_name = type_name
-        self._data = {}
+        # self._data = {}
         self._validators = {}
-        self.parent = None
+        self._orphan_data = {} # properties dict for use while object has no parent
+        self._parent = None
+
+    @property
+    def _data(self):
+        if self.parent is None:
+            # Use orphan data
+            return self._orphan_data
+        else:
+            # Get data from parent's dict
+            return self.parent._get_child_data(self)
+
+    @property
+    def parent(self):
+        return self._parent
+
+    def _get_child_data(self, child):
+        self_data = self.parent._get_child_data(self)
+        return self_data[child.type_name]
 
     def _set_prop(self, prop, val):
         validator = self._validators.get(prop)
@@ -400,40 +440,74 @@ class BasePlotlyType:
             self._data[prop] = val
             self._send_update(prop, val)
 
-    def _set_compound_prop(self, prop, val, curr_val):
+    def _set_compound_prop(self, prop, val, curr_val: 'BasePlotlyType'):
+        # Validate coerce new value
         validator = self._validators.get(prop)
-        val = validator.validate_coerce(val)
-
-        # Reparent
-        val.parent = self
-        dict_val = val._data
-        if curr_val is not None and curr_val is not val:
-            curr_val.parent = None
+        val = validator.validate_coerce(val)  # type: BasePlotlyType
 
         # Update data dict
-        if prop not in self._data or self._data[prop] != dict_val:
-            self._data[prop] = dict_val
-            self._send_update(prop, dict_val)
+        if curr_val is not None:
+            curr_dict_val = deepcopy(curr_val._data)
+        else:
+            curr_dict_val = None
+
+        if val is not None:
+            new_dict_val = deepcopy(val._data)
+        else:
+            new_dict_val = None
+
+        self._data[prop] = new_dict_val
+
+        # Send update if there was a change in value
+        if curr_dict_val != new_dict_val:
+            self._send_update(prop, new_dict_val)
+
+        # Reparent new value and clear orphan data
+        val._parent = self
+        val._orphan_data.clear()
+
+        # Reparent old value and update orphan data
+        if curr_val is not None and curr_val is not val:
+            if curr_dict_val is not None:
+                curr_val._orphan_data.update(curr_dict_val)
+            curr_val._parent = None
 
         return val
 
     def _set_array_prop(self, prop, val, curr_val):
+        # Validate coerce new value
         validator = self._validators.get(prop)
         val = validator.validate_coerce(val)  # type: tuple
 
-        # Reparent
-        if curr_val:
-            for cv in curr_val:
-                cv.parent = None
-
-        for v in val:
-            v.parent = self
-
         # Update data dict
-        dict_val = [v._data for v in val]
-        if prop not in self._data or self._data[prop] != dict_val:
-            self._data[prop] = dict_val
-            self._send_update(prop, dict_val)
+        if curr_val is not None:
+            curr_dict_vals = [deepcopy(cv._data) for cv in curr_val]
+        else:
+            curr_dict_vals = None
+
+        if val is not None:
+            new_dict_vals = [deepcopy(nv._data) for nv in val]
+        else:
+            new_dict_vals = None
+
+        self._data[prop] = new_dict_vals
+
+        # Send update if there was a change in value
+        if curr_dict_vals != new_dict_vals:
+            self._send_update(prop, new_dict_vals)
+
+        # Reparent new values and clear orphan data
+        if val is not None:
+            for v in val:
+                v._orphan_data.clear()
+                v._parent = self
+
+        # Reparent
+        if curr_val is not None:
+            for cv, cv_dict in zip(curr_val, curr_dict_vals):
+                if cv_dict is not None:
+                    cv._orphan_data.update(cv_dict)
+                cv._parent = None
 
         return val
 

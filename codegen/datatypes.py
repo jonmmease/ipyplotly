@@ -242,7 +242,6 @@ class Figure(BaseFigureWidget):\n""")
             )""")
 
         buffer.write(f"""
-        new_trace.parent = self
         return self._add_trace(new_trace)""")
 
     buffer.write('\n')
