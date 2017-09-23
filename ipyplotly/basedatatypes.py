@@ -413,14 +413,13 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     @staticmethod
     def apply_dict_delta(trace_data, delta_data):
-
         if isinstance(trace_data, dict):
             assert isinstance(delta_data, dict)
 
             for p, delta_val in delta_data.items():
                 if isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
                     if p not in trace_data:
-                        trace_data[p] = {}
+                        trace_data[p] = {} if isinstance(delta_val, dict) else []
 
                     trace_val = trace_data[p]
                     BaseFigureWidget.apply_dict_delta(trace_val, delta_val)
@@ -430,8 +429,11 @@ class BaseFigureWidget(widgets.DOMWidget):
             assert isinstance(delta_data, list)
 
             for i, delta_val in enumerate(delta_data):
+                if i >= len(trace_data):
+                    trace_data.append(None)
+
                 trace_val = trace_data[i]
-                if isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
+                if trace_val is not None and isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
                     BaseFigureWidget.apply_dict_delta(trace_val, delta_val)
                 else:
                     trace_data[i] = delta_val
@@ -469,7 +471,18 @@ class BasePlotlyType:
 
     def _get_child_data(self, child):
         self_data = self.parent._get_child_data(self)
-        return None if not self_data else self_data.get(child.type_name, None)
+        if self_data is None:
+            return None
+        else:
+            child_or_children = getattr(self, '_' + child.type_name)
+            if child is child_or_children:
+                return self_data.get(child.type_name, None)
+            elif isinstance(child_or_children, (list, tuple)):
+                child_ind = child_or_children.index(child)
+                children_data = self_data.get(child.type_name, None)
+                return children_data[child_ind] if children_data is not None else None
+            else:
+                ValueError('Unexpected child: %s' % child_or_children)
 
     @property
     def _delta(self):
@@ -480,8 +493,18 @@ class BasePlotlyType:
 
     def _get_child_delta(self, child):
         self_delta = self.parent._get_child_delta(self)
-        return None if not self_delta else self_delta.get(child.type_name, None)
-
+        if self_delta is None:
+            return None
+        else:
+            child_or_children = getattr(self, '_' + child.type_name)
+            if child is child_or_children:
+                return self_delta.get(child.type_name, None)
+            elif isinstance(child_or_children, (list, tuple)):
+                child_ind = child_or_children.index(child)
+                children_data = self_delta.get(child.type_name, None)
+                return children_data[child_ind] if children_data is not None else None
+            else:
+                ValueError('Unexpected child: %s' % child_or_children)
 
     @property
     def parent(self):
