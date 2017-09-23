@@ -83,7 +83,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         \"\"\"
         {subtype_description}
         \"\"\"
-        return None if not self._data else self._data.get('{subtype_node.name_property}', None)
+        return self._get_prop('{subtype_node.name_property}')
         
     @{subtype_node.name_property}.setter
     def {subtype_node.name_property}(self, val):

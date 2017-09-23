@@ -116,7 +116,13 @@ var FigureModel = widgets.DOMWidgetModel.extend({
                 var lastKey = keyPath[keyPath.length-1];
                 var trace_v = v[i % v.length];
 
-                trace_data[lastKey] = trace_v;
+                if (trace_v === null || trace_v === undefined){
+                    if(lastKey in trace_data) {
+                        delete trace_data[lastKey];
+                    }
+                } else {
+                    trace_data[lastKey] = trace_v;
+                }
             }
         }
     }
@@ -202,7 +208,7 @@ var FigureView = widgets.DOMWidgetView.extend({
                 traceDeltas[i] = this.create_delta_object(traceData, fullTraceData);
             }
 
-            // this.model.set('_plotly_restyleDelta', traceDeltas);
+            this.model.set('_plotly_restyleDelta', traceDeltas);
 
             // Update layout
             var fullLayoutData = this.clone_fullLayout_data(this.el._fullLayout);
@@ -273,7 +279,7 @@ var FigureView = widgets.DOMWidgetView.extend({
                 traceDeltas[i] = this.create_delta_object(fullDataPres[i], this.el._fullData[idx[i]]);
             }
 
-            // this.model.set('_plotly_restyleDelta', traceDeltas);
+            this.model.set('_plotly_restyleDelta', traceDeltas);
 
             // Update layout
             var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
@@ -325,29 +331,32 @@ var FigureView = widgets.DOMWidgetView.extend({
 
     create_delta_object: function(data, fullData) {
         var res = {};
-        for (var p in data) {
-            if (data.hasOwnProperty(p) && p in fullData && fullData[p] !== null)
+        for (var p in fullData) {
+            if (p[0] !== '_' && fullData.hasOwnProperty(p) && fullData[p] !== null) {
 
                 var props_equal;
-                if (Array.isArray(data[p]) && Array.isArray(fullData[p])) {
+                if (data.hasOwnProperty(p) && Array.isArray(data[p]) && Array.isArray(fullData[p])) {
                     props_equal = JSON.stringify(data[p]) === JSON.stringify(fullData[p]);
-                } else {
+                } else if (data.hasOwnProperty(p)) {
                     props_equal = data[p] === fullData[p];
+                } else {
+                    props_equal = false;
                 }
 
                 if (!props_equal || p === 'uid') {  // Let uids through
                     // property has non-null value in fullData that doesn't match the value in
                     var full_val = fullData[p];
-                    if (typeof full_val === 'object' && !Array.isArray(full_val)) {
+                    if (data.hasOwnProperty(p) && typeof full_val === 'object' && !Array.isArray(full_val)) {
                         var full_obj = this.create_delta_object(data[p], full_val);
                         if (Object.keys(full_obj).length > 0) {
                             // new object is not empty
                             res[p] = full_obj;
                         }
-                    } else if (full_val !== undefined){
+                    } else if (full_val !== undefined) {
                         res[p] = full_val;
                     }
                 }
+            }
         }
         return res
     }

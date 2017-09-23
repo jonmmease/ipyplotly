@@ -56,7 +56,10 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         # Initialize backing property for trace objects
         self._traces = ()  # type: typ.Tuple[BaseTraceType]
+        self._traces_deltas = []
+
         self._layout = None
+        self._layout_delta = {}
 
         from ipyplotly.datatypes import Layout
         self._layout = Layout()
@@ -75,16 +78,17 @@ class BaseFigureWidget(widgets.DOMWidget):
     @observe('_plotly_restyleDelta')
     def handler_plotly_restyleDelta(self, change):
         deltas = change['new']
+        # print('addTraceDeltas msg: {deltas}'.format(deltas=deltas))
+
         if not deltas:
             return
 
-        # print('addTraceDeltas msg: {deltas}'.format(deltas=deltas))
         for delta in deltas:
             uid = delta['uid']
             uid_traces = [trace for trace in self.traces if trace._data.get('uid', None) == uid]
             assert len(uid_traces) == 1
             uid_trace = uid_traces[0]
-            BaseFigureWidget.apply_dict_delta(uid_trace._data, delta)
+            BaseFigureWidget.apply_dict_delta(uid_trace._delta, delta)
 
         # Remove processed trace delta data
         self._plotly_restyleDelta = None
@@ -146,8 +150,10 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         # Compute trace data list after removal
         traces_data_post_removal = [t for t in self._traces_data]
+        traces_deltas_post_removal = [t for t in self._traces_deltas]
         for i in reversed(remove_inds):
             del traces_data_post_removal[i]
+            del traces_deltas_post_removal[i]
 
         if remove_inds:
             self._plotly_deleteTraces = remove_inds
@@ -166,6 +172,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         # Update _traces order
         self._traces_data = [_trace for i, _trace in sorted(zip(new_inds, traces_data_post_removal))]
+        self._traces_deltas = [_trace for i, _trace in sorted(zip(new_inds, traces_deltas_post_removal))]
 
         self._traces = new_traces
 
@@ -213,12 +220,17 @@ class BaseFigureWidget(widgets.DOMWidget):
 
                     restyle_msg_vs.append(trace_v)
 
-                    if last_key not in trace_data or trace_data[last_key] != trace_v:
-                        trace_data[last_key] = trace_v
-                        any_vals_changed = True
+                    if trace_v is None:
+                        if last_key in trace_data:
+                            trace_data.pop(last_key)
+                            any_vals_changed = True
+                    else:
+                        if last_key not in trace_data or trace_data[last_key] != trace_v:
+                            trace_data[last_key] = trace_v
+                            any_vals_changed = True
 
                 if any_vals_changed:
-                    # At lease on of the values for one of the traces has changed. Update them all
+                    # At lease one of the values for one of the traces has changed. Update them all
                     restyle_data[raw_key] = restyle_msg_vs
 
         return restyle_data
@@ -228,7 +240,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             trace_indexes = [trace_indexes]
 
         restype_msg = (style, trace_indexes)
-        print('Restyle: {msg}\n type: {typ}'.format(msg=restype_msg, typ=type(restype_msg)))
+        # print('Restyle: {msg}\n type: {typ}'.format(msg=restype_msg, typ=type(restype_msg)))
         self._plotly_restyle = restype_msg
         self._plotly_restyle = None
 
@@ -255,6 +267,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         # Update python side
         self._traces_data = self._traces_data + [new_trace_data]
+        self._traces_deltas = self._traces_deltas + [{}]
         self._traces = self._traces + (trace,)
 
         # Send to front end
@@ -277,6 +290,19 @@ class BaseFigureWidget(widgets.DOMWidget):
         else:
             raise ValueError('Unrecognized child: %s' % child)
 
+    def _get_child_delta(self, child):
+        try:
+            trace_index = self.traces.index(child)
+        except ValueError as _:
+            trace_index = None
+
+        if trace_index is not None:
+            return self._traces_deltas[trace_index]
+        elif child is self.layout:
+            return self._layout_delta
+        else:
+            raise ValueError('Unrecognized child: %s' % child)
+
     def _init_child_data(self, child):
         # layout and traces dict are never None
         return
@@ -291,7 +317,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             return
 
         # print('relayoutDelta msg: {deltas}'.format(deltas=delta))
-        BaseFigureWidget.apply_dict_delta(self.layout._data, delta)
+        BaseFigureWidget.apply_dict_delta(self.layout._delta, delta)
 
         # Remove processed trace delta data
         self._plotly_relayoutDelta = None
@@ -392,11 +418,11 @@ class BaseFigureWidget(widgets.DOMWidget):
             assert isinstance(delta_data, dict)
 
             for p, delta_val in delta_data.items():
-                if p not in trace_data:
-                    continue
-
-                trace_val = trace_data[p]
                 if isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
+                    if p not in trace_data:
+                        trace_data[p] = {}
+
+                    trace_val = trace_data[p]
                     BaseFigureWidget.apply_dict_delta(trace_val, delta_val)
                 else:
                     trace_data[p] = delta_val
@@ -441,13 +467,33 @@ class BasePlotlyType:
         if child.type_name not in self_data:
             self_data[child.type_name] = {}
 
+    def _get_child_data(self, child):
+        self_data = self.parent._get_child_data(self)
+        return None if not self_data else self_data.get(child.type_name, None)
+
+    @property
+    def _delta(self):
+        if self.parent is None:
+            return None
+        else:
+            return self.parent._get_child_delta(self)
+
+    def _get_child_delta(self, child):
+        self_delta = self.parent._get_child_delta(self)
+        return None if not self_delta else self_delta.get(child.type_name, None)
+
+
     @property
     def parent(self):
         return self._parent
 
-    def _get_child_data(self, child):
-        self_data = self.parent._get_child_data(self)
-        return None if not self_data else self_data.get(child.type_name, None)
+    def _get_prop(self, prop):
+        if self._data is not None and prop in self._data:
+            return self._data[prop]
+        elif self._delta is not None:
+            return self._delta.get(prop, None)
+        else:
+            return None
 
     def _set_prop(self, prop, val):
         validator = self._validators.get(prop)
