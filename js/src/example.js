@@ -153,6 +153,17 @@ var FigureView = widgets.DOMWidgetView.extend({
         var layoutData = this.clone_fullLayout_data(this.el.layout);
         this.model.set('_layout_data', layoutData);
 
+        // Update traces
+        // Loop over new traces
+        var traceDeltas = new Array(initial_traces.length);
+        for(var i=0; i < initial_traces.length; i++) {
+            var fullTraceData = this.el._fullData[i];
+            var traceData = initial_traces[i];
+            traceDeltas[i] = this.create_delta_object(traceData, fullTraceData);
+        }
+
+        this.model.set('_plotly_restyleDelta', traceDeltas);
+
         // Python -> JS event properties
         this.model.on('change:_plotly_addTraces', this.do_addTraces, this);
         this.model.on('change:_plotly_deleteTraces', this.do_deleteTraces, this);

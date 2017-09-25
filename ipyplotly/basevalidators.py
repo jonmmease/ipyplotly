@@ -1,6 +1,7 @@
 import numbers
 import collections
 import textwrap
+import uuid
 
 import numpy as np
 import re
@@ -889,3 +890,48 @@ class ArrayValidator(BaseValidator):
                                                                      typ=type(v)))
 
         return v
+
+
+class BaseTracesValidator:
+    def __init__(self, class_map):
+        self.class_map = class_map
+
+    def validate_coerce(self, v):
+
+        if v is None:
+            v = ()
+        elif isinstance(v, (list, tuple)):
+            trace_classes = tuple(self.class_map.values())
+
+            res = []
+            for v_el in v:
+                if isinstance(v_el, trace_classes):
+                    res.append(v_el)
+                elif isinstance(v_el, dict):
+                    if 'type' in v_el:
+                        trace_type = v_el.pop('type')
+                    else:
+                        trace_type = 'scatter'
+
+                    trace = self.class_map[trace_type](**v_el)
+                    res.append(trace)
+                else:
+                    raise ValueError(("The traces property of a Figure must be a list or tuple "
+                                      "of traces.\n"
+                                      "Received {col_typ} with an instance of type {typ}"
+                                      ).format(col_type=type(v),
+                                               typ=type(v_el)))
+            v = tuple(res)
+
+            # Add UIDs if not set
+            for trace in v:
+                if trace.uid is None:
+                    trace.uid = str(uuid.uuid1())
+
+        elif not isinstance(v, str):
+            raise ValueError(("The traces property of a Figure must be a list or tuple "
+                              "of traces.\n"
+                              "Received value of type {typ}").format(typ=type(v)))
+
+        return v
+

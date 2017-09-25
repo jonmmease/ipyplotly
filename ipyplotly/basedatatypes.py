@@ -1,11 +1,12 @@
 import collections
-import uuid
 import re
-from copy import copy, deepcopy
+import typing as typ
+from copy import deepcopy
 
 import ipywidgets as widgets
-from traitlets import List, Unicode, Dict, Tuple, default, observe
-import typing as typ
+from traitlets import List, Unicode, Dict, default, observe
+
+
 # TODO:
 #  - Traces:
 #    - keep defaults on Python side.  Add JS -> Python deltas to a separate dict and chain map them together.
@@ -51,21 +52,43 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # Constructor
     # -----------
-    def __init__(self, **kwargs):
+    def __init__(self, traces=None, layout=None, **kwargs):
         super().__init__(**kwargs)
 
-        # Initialize backing property for trace objects
-        self._traces = ()  # type: typ.Tuple[BaseTraceType]
-        self._traces_deltas = []
+        # Traces
+        # ------
+        from ipyplotly.validators import TracesValidator
+        self._traces_validator = TracesValidator()
 
-        from ipyplotly.datatypes import Layout
-        self._layout = Layout()  # type: Layout
-        self._layout._parent = self
-        self._layout_data = self._layout._data
-        self._layout_delta = {}
+        if traces is None:
+            self._traces = ()  # type: typ.Tuple[BaseTraceType]
+            self._traces_deltas = []
+        else:
+            traces = self._traces_validator.validate_coerce(traces)
 
+            self._traces = traces
+            self._traces_deltas = [{} for trace in traces]
+            self._traces_data = [deepcopy(trace._data) for trace in traces]
+            for trace in traces:
+                trace._orphan_data.clear()
+                trace._parent = self
+
+        # Layout
+        # ------
         from ipyplotly.validators import LayoutValidator
         self._layout_validator = LayoutValidator()
+
+        from ipyplotly.datatypes import Layout
+
+        if layout is None:
+            layout = Layout()  # type: Layout
+        else:
+            layout = self._layout_validator.validate_coerce(layout)
+
+        self._layout = layout
+        self._layout_data = deepcopy(self._layout._data)
+        self._layout._parent = self
+        self._layout_delta = {}
 
     # ### Trait methods ###
     @default('_plotly_addTraces')
@@ -87,7 +110,10 @@ class BaseFigureWidget(widgets.DOMWidget):
         for delta in deltas:
             uid = delta['uid']
             uid_traces = [trace for trace in self.traces if trace._data.get('uid', None) == uid]
-            assert len(uid_traces) == 1
+            if len(uid_traces) != 1:
+                raise ValueError('uid of restyle message did not match exactly one trace: \n'
+                                 'uid: {uid}'.format(uid=uid))
+
             uid_trace = uid_traces[0]
             BaseFigureWidget.apply_dict_delta(uid_trace._delta, delta)
 
@@ -253,30 +279,33 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         self._send_restyle_msg({prop: send_val}, trace_indexes=trace_index)
 
-    def _add_trace(self, trace: 'BaseTraceType'):
+    def add_traces(self, traces: typ.List['BaseTraceType']):
 
-        # Add UID if not set
-        if not trace._data.get('uid', None):
-            trace._data['uid'] = str(uuid.uuid1())
+        if not isinstance(traces, (list, tuple)):
+            traces = [traces]
+
+        # Validate
+        traces = self._traces_validator.validate_coerce(traces)
 
         # Make deep copy of trace data (Optimize later if needed)
-        new_trace_data = deepcopy(trace._data)
+        new_traces_data = [deepcopy(trace._data) for trace in traces]
 
         # Update trace parent
-        trace._parent = self
-        trace._orphan_data.clear()
+        for trace in traces:
+            trace._parent = self
+            trace._orphan_data.clear()
 
         # Update python side
-        self._traces_data = self._traces_data + [new_trace_data]
-        self._traces_deltas = self._traces_deltas + [{}]
-        self._traces = self._traces + (trace,)
+        self._traces_data = self._traces_data + new_traces_data
+        self._traces_deltas = self._traces_deltas + [{} for trace in traces]
+        self._traces = self._traces + traces
 
         # Send to front end
-        add_traces_msg = [new_trace_data]
+        add_traces_msg = new_traces_data
         self._plotly_addTraces = add_traces_msg
         self._plotly_addTraces = None
 
-        return trace
+        return traces
 
     def _get_child_data(self, child):
         try:
@@ -596,7 +625,12 @@ class BasePlotlyType:
         else:
             new_dict_vals = None
 
-        self._data[prop] = new_dict_vals
+        # Update data dict
+        if not new_dict_vals:
+            if prop in self._data:
+                self._data.pop(prop)
+        else:
+            self._data[prop] = new_dict_vals
 
         # Send update if there was a change in value
         if curr_dict_vals != new_dict_vals:

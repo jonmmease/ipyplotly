@@ -2,7 +2,7 @@ import os
 import os.path as opath
 import shutil
 from io import StringIO
-from codegen.utils import format_source, PlotlyNode
+from codegen.utils import format_source, PlotlyNode, TraceNode
 import textwrap
 
 def build_validators_py(parent_node: PlotlyNode):
@@ -77,4 +77,44 @@ def write_validator_py(outdir, node: PlotlyNode):
             f.write(formatted_source)
 
 
+def build_traces_validator_py(base_node: TraceNode):
+    tracetype_nodes = base_node.child_compound_datatypes
+    buffer = StringIO()
 
+    import_csv = ', '.join([tracetype_node.name_class for tracetype_node in tracetype_nodes])
+
+    buffer.write(f"""
+class TracesValidator(bv.BaseTracesValidator):
+
+    def __init__(self):
+        from ipyplotly.datatypes import ({import_csv})
+        super().__init__(class_map={{
+    """)
+
+    for i, tracetype_node in enumerate(tracetype_nodes):
+        sfx = ',' if i < len(tracetype_nodes) else ''
+
+        buffer.write(f"""
+            '{tracetype_node.name_property}': {tracetype_node.name_class}{sfx}""")
+
+    buffer.write("""
+        })""")
+
+    return buffer.getvalue()
+
+
+def append_traces_validator_py(outdir, base_node: TraceNode):
+
+    if base_node.trace_path:
+        raise ValueError('Expected root trace node. Received node with path "%s"' % base_node.dir_str)
+
+    source = build_traces_validator_py(base_node)
+    formatted_source = format_source(source)
+
+    # Append to file
+    # --------------
+    filepath = opath.join(outdir, '__init__.py')
+
+    with open(filepath, 'a') as f:
+        f.write('\n\n')
+        f.write(formatted_source)

@@ -4,8 +4,7 @@ import shutil
 
 from codegen.datatypes import build_datatypes_py, write_datatypes_py, append_figure_class
 from codegen.utils import TraceNode, PlotlyNode, LayoutNode
-from codegen.validators import write_validator_py
-
+from codegen.validators import write_validator_py, append_traces_validator_py
 
 if __name__ == '__main__':
 
@@ -51,6 +50,9 @@ if __name__ == '__main__':
     for node in compound_trace_nodes:
         write_validator_py(outdir, node)
 
+    # Append traces validator class
+    # -----------------------------
+    append_traces_validator_py(validators_pkgdir, base_node)
 
 
 
