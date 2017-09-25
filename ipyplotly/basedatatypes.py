@@ -58,13 +58,14 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._traces = ()  # type: typ.Tuple[BaseTraceType]
         self._traces_deltas = []
 
-        self._layout = None
-        self._layout_delta = {}
-
         from ipyplotly.datatypes import Layout
-        self._layout = Layout()
+        self._layout = Layout()  # type: Layout
         self._layout._parent = self
         self._layout_data = self._layout._data
+        self._layout_delta = {}
+
+        from ipyplotly.validators import LayoutValidator
+        self._layout_validator = LayoutValidator()
 
     # ### Trait methods ###
     @default('_plotly_addTraces')
@@ -328,16 +329,23 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     @layout.setter
     def layout(self, new_layout):
-        # TODO: validate layout
-        self._layout_data = new_layout._data
+        # Validate layout
+        new_layout = self._layout_validator.validate_coerce(new_layout)
+        new_layout_data = deepcopy(new_layout._data)
 
         # Unparent current layout
         if self._layout:
-            self._layout.parent = None
+            old_layout_data = deepcopy(self._layout._data)
+            self._layout._orphan_data.update(old_layout_data)
+            self._layout._parent = None
 
         # Parent new layout
-        new_layout.parent = self
+        self._layout_data = new_layout_data
+        new_layout._parent = self
         self._layout = new_layout
+
+        # Notify JS side
+        self._send_relayout_msg(new_layout_data)
 
     def _relayout_child(self, child, prop, val):
         send_val = val  # Don't wrap in a list for relayout
