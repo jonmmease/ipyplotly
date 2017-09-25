@@ -195,6 +195,21 @@ var FigureView = widgets.DOMWidgetView.extend({
     handle_relayout: function (data) {
         console.log("plotly_relayout");
         console.log(data);
+
+        // Work around some plotly bugs/limitations
+
+        // Sometimes (in scatterGL at least) axis range isn't wrapped in range
+        if ('xaxis' in data && Array.isArray(data['xaxis'])) {
+            data['xaxis'] = {'range': data['xaxis']}
+        }
+
+        if ('yaxis' in data && Array.isArray(data['yaxis'])) {
+            data['yaxis'] = {'range': data['yaxis']}
+        }
+
+        // Parallel coordinate diagram 'constraintrange' property not provided
+
+
         this.model.set('_plotly_relayoutPython', data);
         this.touch();
     },
@@ -342,6 +357,9 @@ var FigureView = widgets.DOMWidgetView.extend({
 
     create_delta_object: function(data, fullData) {
         var res = {};
+        if (data === null || data === undefined) {
+            data = {};
+        }
         for (var p in fullData) {
             if (p[0] !== '_' && fullData.hasOwnProperty(p) && fullData[p] !== null) {
 

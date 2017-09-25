@@ -127,7 +127,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             return
 
         restyle_data = restyle_msg[0]
-        # print('delta restyle: {restyle_data}'.format(restyle_data=restyle_data))
+        print('Restyle (JS->Py): {restyle_data}'.format(restyle_data=restyle_data))
         if len(restyle_msg) > 1 and restyle_msg[1] is not None:
             trace_inds = restyle_msg[1]
         else:
@@ -267,7 +267,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             trace_indexes = [trace_indexes]
 
         restype_msg = (style, trace_indexes)
-        # print('Restyle: {msg}\n type: {typ}'.format(msg=restype_msg, typ=type(restype_msg)))
+        print('Restyle (Py->JS): {msg}\n type: {typ}'.format(msg=restype_msg, typ=type(restype_msg)))
         self._plotly_restyle = restype_msg
         self._plotly_restyle = None
 
@@ -390,6 +390,10 @@ class BaseFigureWidget(widgets.DOMWidget):
         relayout_data = change['new']
         if not relayout_data:
             return
+
+        if 'lastInputTime' in relayout_data:
+            # Remove 'lastInputTime'. Seems to be an internal plotly property that is introduced for some plot types
+            relayout_data.pop('lastInputTime')
 
         self.relayout(relayout_data)
 
