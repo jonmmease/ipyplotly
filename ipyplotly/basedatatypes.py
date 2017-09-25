@@ -346,7 +346,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         if not delta:
             return
 
-        # print('relayoutDelta msg: {deltas}'.format(deltas=delta))
+        # print('Relayout (JS->Py): {deltas}'.format(deltas=delta))
         BaseFigureWidget.apply_dict_delta(self.layout._delta, delta)
 
         # Remove processed trace delta data
@@ -381,7 +381,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._send_relayout_msg({prop: send_val})
 
     def _send_relayout_msg(self, layout):
-        # print('relayout: {layout}'.format(layout=layout))
+        # print('Relayout (Py->JS): {layout}'.format(layout=layout))
         self._plotly_relayout = layout
         self._plotly_relayout = None
 
