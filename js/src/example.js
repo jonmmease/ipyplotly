@@ -178,14 +178,20 @@ var FigureView = widgets.DOMWidgetView.extend({
 
         // Plotly events
         var that = this;
-        this.el.on('plotly_restyle', function(update) {that.handle_restyle(update)});
-        this.el.on('plotly_relayout', function(update) {that.handle_relayout(update)});
+        this.el.on('plotly_restyle', function(update) {that.handle_plotly_restyle(update)});
+        this.el.on('plotly_relayout', function(update) {that.handle_plotly_relayout(update)});
+        this.el.on('plotly_click', function(update) {that.handle_plotly_click(update)});
+        this.el.on('plotly_hover', function(update) {that.handle_plotly_hover(update)});
+        this.el.on('plotly_unhover', function(update) {that.handle_plotly_unhover(update)});
+        this.el.on('plotly_selected', function(update) {that.handle_plotly_selected(update)});
+        this.el.on('plotly_doubleclick', function(update) {that.handle_plotly_doubleclick(update)});
+        this.el.on('plotly_afterplot', function(update) {that.handle_plotly_afterplot(update)});
 
         // sync any/all changes back to model
         this.touch();
     },
 
-    handle_restyle: function (data) {
+    handle_plotly_restyle: function (data) {
         console.log("plotly_restyle");
         console.log(data);
 
@@ -214,7 +220,7 @@ var FigureView = widgets.DOMWidgetView.extend({
         this.touch();
     },
 
-    handle_relayout: function (data) {
+    handle_plotly_relayout: function (data) {
         console.log("plotly_relayout");
         console.log(data);
 
@@ -229,11 +235,46 @@ var FigureView = widgets.DOMWidgetView.extend({
             data['yaxis'] = {'range': data['yaxis']}
         }
 
-
-
-
         this.model.set('_plotly_relayoutPython', data);
         this.touch();
+    },
+
+    handle_plotly_click: function (data) {
+        console.log("plotly_click");
+        console.log(data);
+    },
+
+    handle_plotly_hover: function (data) {
+        console.log("plotly_hover");
+        console.log(data);
+
+        // keep only 'points'
+        // remove points -
+        //          - data, fullData, xaxis, yaxis, zaxis
+        // Lift out uid from data
+        // Maybe get modifier keys from event too
+        //
+        // Maybe 'transpose' into homogeneous lists with elements per point
+    },
+
+    handle_plotly_unhover: function (data) {
+        console.log("plotly_unhover");
+        console.log(data);
+    },
+
+    handle_plotly_selected: function (data) {
+        console.log("plotly_selected");
+        console.log(data);
+    },
+
+    handle_plotly_doubleclick: function (data) {
+        console.log("plotly_doubleclick");
+        console.log(data);
+    },
+
+    handle_plotly_afterplot: function (data) {
+        console.log("plotly_afterplot");
+        console.log(data);
     },
 
     do_addTraces: function () {
