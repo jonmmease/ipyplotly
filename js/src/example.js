@@ -188,6 +188,28 @@ var FigureView = widgets.DOMWidgetView.extend({
     handle_restyle: function (data) {
         console.log("plotly_restyle");
         console.log(data);
+
+        // Work around some plotly bugs/limitations
+        if (data === null || data === undefined) {
+
+            data = new Array(this.el.data.length);
+
+            for (var t = 0; t < this.el.data.length; t++) {
+                var traceData = this.el.data[t];
+                data[t] = {'uid': traceData['uid']};
+                if (traceData['type'] === 'parcoords') {
+
+                    // Parallel coordinate diagram 'constraintrange' property not provided
+                    for (var d = 0; d < traceData.dimensions.length; d++) {
+                        var constraintrange = traceData.dimensions[d]['constraintrange'];
+                        if (constraintrange !== undefined) {
+                            data[t]['dimensions[' + d + '].constraintrange'] = [constraintrange];
+                        }
+                    }
+                }
+            }
+        }
+
         this.model.set('_plotly_restylePython', data);
         this.touch();
     },
@@ -207,7 +229,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             data['yaxis'] = {'range': data['yaxis']}
         }
 
-        // Parallel coordinate diagram 'constraintrange' property not provided
+
 
 
         this.model.set('_plotly_relayoutPython', data);
@@ -286,7 +308,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             var idx = data[1];
 
             if (idx === null || idx === undefined) {
-                idx = Array.apply(null, Array(self.el.data.length)).map(function (_, i) {return i;});
+                idx = Array.apply(null, Array(this.el.data.length)).map(function (_, i) {return i;});
             }
             if (!Array.isArray(idx)) {
                 // Make sure idx is an array
