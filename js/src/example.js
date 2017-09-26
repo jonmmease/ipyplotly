@@ -25,7 +25,8 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
         // JS -> Python
         _plotly_restylePython: null,
-        _plotly_relayoutPython: null
+        _plotly_relayoutPython: null,
+        _plotly_pointsCallback: null
     }),
 
     initialize: function() {
@@ -191,6 +192,80 @@ var FigureView = widgets.DOMWidgetView.extend({
         this.touch();
     },
 
+    buildPointsObject: function (data) {
+        var pointObjects = data['points'];
+        var numPoints = pointObjects.length;
+        var pointsObject = {
+            'curveNumbers': new Array(numPoints),
+            'pointNumbers': new Array(numPoints),
+            'xs': new Array(numPoints),
+            'ys': new Array(numPoints)
+        };
+
+        for (var p = 0; p < numPoints; p++) {
+            pointsObject['curveNumbers'][p] = pointObjects[p]['curveNumber'];
+            pointsObject['pointNumbers'][p] = pointObjects[p]['pointNumber'];
+            pointsObject['xs'][p] = pointObjects[p]['x'];
+            pointsObject['ys'][p] = pointObjects[p]['y'];
+        }
+
+        // Add z if present
+        var hasZ = pointObjects[0].hasOwnProperty('z');
+        if (hasZ) {
+            pointsObject['zs'] = new Array(numPoints);
+            for (p = 0; p < numPoints; p++) {
+                pointsObject['zs'][p] = pointObjects[p]['z'];
+            }
+        }
+
+        return pointsObject
+    },
+
+    buildMouseEventObject: function (data) {
+        var event = data['event'];
+        var mouseEventObject = {
+            // Keyboard modifiers
+            'alt': event['altKey'],
+            'ctrl': event['ctrlKey'],
+            'meta': event['metaKey'],
+            'shift': event['shiftKey'],
+
+            // Mouse buttons
+            'button': event['button'],
+                // Indicates which button was pressed on the mouse to trigger the event.
+                //   0: Main button pressed, usually the left button or the un-initialized state
+                //   1: Auxiliary button pressed, usually the wheel button or the middle button (if present)
+                //   2: Secondary button pressed, usually the right button
+                //   3: Fourth button, typically the Browser Back button
+                //   4: Fifth button, typically the Browser Forward button
+            'buttons': event['buttons']
+                // Indicates which buttons are pressed on the mouse when the event is triggered.
+                //   0  : No button or un-initialized
+                //   1  : Primary button (usually left)
+                //   2  : Secondary button (usually right)
+                //   4  : Auxilary button (usually middle or mouse wheel button)
+                //   8  : 4th button (typically the "Browser Back" button)
+                //   16 : 5th button (typically the "Browser Forward" button)
+        };
+        return mouseEventObject
+    },
+
+    buildSelectorObject: function(data) {
+        var selectorObject = {};
+
+        // Test for box select
+        if (data.hasOwnProperty('range')) {
+            selectorObject['type'] = 'box';
+            selectorObject['xrange'] = data['range']['x'];
+            selectorObject['yrange'] = data['range']['y'];
+        } else if (data.hasOwnProperty('lassoPoints')) {
+            selectorObject['type'] = 'lasso';
+            selectorObject['xs'] = data['lassoPoints']['x'];
+            selectorObject['ys'] = data['lassoPoints']['y'];
+        }
+        return selectorObject
+    },
+
     handle_plotly_restyle: function (data) {
         console.log("plotly_restyle");
         console.log(data);
@@ -242,29 +317,69 @@ var FigureView = widgets.DOMWidgetView.extend({
     handle_plotly_click: function (data) {
         console.log("plotly_click");
         console.log(data);
+
+        if (data === null || data === undefined) return;
+
+        var pyData = {
+            'event_type': 'plotly_click',
+            'points': this.buildPointsObject(data),
+            'state': this.buildMouseEventObject(data)
+        };
+
+        console.log(pyData);
+        this.model.set('_plotly_pointsCallback', pyData);
+        this.touch();
     },
 
     handle_plotly_hover: function (data) {
         console.log("plotly_hover");
         console.log(data);
 
-        // keep only 'points'
-        // remove points -
-        //          - data, fullData, xaxis, yaxis, zaxis
-        // Lift out uid from data
-        // Maybe get modifier keys from event too
-        //
-        // Maybe 'transpose' into homogeneous lists with elements per point
+        if (data === null || data === undefined) return;
+
+        var pyData = {
+            'event_type': 'plotly_hover',
+            'points': this.buildPointsObject(data),
+            'state': this.buildMouseEventObject(data)
+        };
+
+        console.log(pyData);
+        this.model.set('_plotly_pointsCallback', pyData);
+        this.touch();
     },
 
     handle_plotly_unhover: function (data) {
         console.log("plotly_unhover");
         console.log(data);
+
+        if (data === null || data === undefined) return;
+
+        var pyData = {
+            'event_type': 'plotly_unhover',
+            'points': this.buildPointsObject(data),
+            'state': this.buildMouseEventObject(data)
+        };
+
+        console.log(pyData);
+        this.model.set('_plotly_pointsCallback', pyData);
+        this.touch();
     },
 
     handle_plotly_selected: function (data) {
         console.log("plotly_selected");
         console.log(data);
+
+        if (data === null || data === undefined) return;
+
+        var pyData = {
+            'event_type': 'plotly_selected',
+            'points': this.buildPointsObject(data),
+            'selector': this.buildSelectorObject(data),
+        };
+
+        console.log(pyData);
+        this.model.set('_plotly_pointsCallback', pyData);
+        this.touch();
     },
 
     handle_plotly_doubleclick: function (data) {

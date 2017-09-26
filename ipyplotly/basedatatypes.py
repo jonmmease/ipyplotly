@@ -8,17 +8,21 @@ from traitlets import List, Unicode, Dict, default, observe
 
 
 # TODO:
-#  - Traces:
-#    - keep defaults on Python side.  Add JS -> Python deltas to a separate dict and chain map them together.
-#       This way new views match existing, including default behavior, and python side sees current values
+# Callbacks
+# ---------
+# - Add base class for traces
+# - Trace point callbacks
+#    - on_hover, on_unhover, on_click, on_select,
+#    - on_reconstrain for parcoords
 #
-#  - Layout
-#    - Two dicts on Python side (layout and fullLayout)
-#       - layout is things explicitly set, fullLayout is synced from JS side with other defaults
-#       - layout is synced to JS side on construction and updated on relayout commands on both sides
+# - Figure (or Layout) level callbacks
+#    - on_panzoom (pan/zoom)
+#    - on_doubleclick ()
+#    - on_plotly_afterplot
 #
-#
-#  Rework _data system to support chain dict. Reference to top level dictionary with key path to self?
+# - Property callbacks (every plotly datatype)
+#   - on_change('property', listener())
+#   Triggering these could be tricky for events that originate on JS side
 #
 @widgets.register
 class BaseFigureWidget(widgets.DOMWidget):
@@ -49,6 +53,9 @@ class BaseFigureWidget(widgets.DOMWidget):
     _plotly_relayoutDelta = Dict(allow_none=True).tag(sync=True)
     _plotly_restylePython = List(allow_none=True).tag(sync=True)
     _plotly_relayoutPython = Dict(allow_none=True).tag(sync=True)
+
+    # For plotly_select/hover/unhover/click
+    _plotly_pointsCallback = Dict(allow_none=True).tag(sync=True)
 
     # Constructor
     # -----------
@@ -445,6 +452,19 @@ class BaseFigureWidget(widgets.DOMWidget):
                 pass
 
         return key_path2
+
+    # Callbacks
+    # ---------
+    @observe('_plotly_pointsCallback')
+    def handler_plotly_pointsCallback(self, change):
+        callback_data = change['new']
+        if not callback_data:
+            return
+
+        print(callback_data)
+
+        # self._plotly_relayoutPython = None
+
 
     # Static helpers
     # --------------
