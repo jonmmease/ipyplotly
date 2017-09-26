@@ -373,7 +373,9 @@ var FigureView = widgets.DOMWidgetView.extend({
         console.log("plotly_selected");
         console.log(data);
 
-        if (data === null || data === undefined) return;
+        if (data === null ||
+            data === undefined ||
+            data['points'].length === 0) return;
 
         var pyData = {
             'event_type': 'plotly_selected',
