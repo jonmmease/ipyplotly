@@ -223,22 +223,25 @@ var FigureView = widgets.DOMWidgetView.extend({
 
     buildMouseEventObject: function (data) {
         var event = data['event'];
-        var mouseEventObject = {
-            // Keyboard modifiers
-            'alt': event['altKey'],
-            'ctrl': event['ctrlKey'],
-            'meta': event['metaKey'],
-            'shift': event['shiftKey'],
+        if (event === undefined) {
+            return {}
+        } else {
+            var mouseEventObject = {
+                // Keyboard modifiers
+                'alt': event['altKey'],
+                'ctrl': event['ctrlKey'],
+                'meta': event['metaKey'],
+                'shift': event['shiftKey'],
 
-            // Mouse buttons
-            'button': event['button'],
+                // Mouse buttons
+                'button': event['button'],
                 // Indicates which button was pressed on the mouse to trigger the event.
                 //   0: Main button pressed, usually the left button or the un-initialized state
                 //   1: Auxiliary button pressed, usually the wheel button or the middle button (if present)
                 //   2: Secondary button pressed, usually the right button
                 //   3: Fourth button, typically the Browser Back button
                 //   4: Fifth button, typically the Browser Forward button
-            'buttons': event['buttons']
+                'buttons': event['buttons']
                 // Indicates which buttons are pressed on the mouse when the event is triggered.
                 //   0  : No button or un-initialized
                 //   1  : Primary button (usually left)
@@ -246,8 +249,9 @@ var FigureView = widgets.DOMWidgetView.extend({
                 //   4  : Auxilary button (usually middle or mouse wheel button)
                 //   8  : 4th button (typically the "Browser Back" button)
                 //   16 : 5th button (typically the "Browser Forward" button)
-        };
-        return mouseEventObject
+            };
+            return mouseEventObject
+        }
     },
 
     buildSelectorObject: function(data) {

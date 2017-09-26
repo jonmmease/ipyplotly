@@ -24,6 +24,9 @@ from traitlets import List, Unicode, Dict, default, observe
 #   - on_change('property', listener())
 #   Triggering these could be tricky for events that originate on JS side
 #
+from ipyplotly.callbacks import Points, BoxSelector, LassoSelector, InputState
+
+
 @widgets.register
 class BaseFigureWidget(widgets.DOMWidget):
 
@@ -68,7 +71,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._traces_validator = TracesValidator()
 
         if traces is None:
-            self._traces = ()  # type: typ.Tuple[BaseTraceType]
+            self._traces = ()  # type: typ.Tuple[BaseTraceHierarchyType]
             self._traces_deltas = []
         else:
             traces = self._traces_validator.validate_coerce(traces)
@@ -145,7 +148,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     # Traces
     # ------
     @property
-    def traces(self) -> typ.Tuple['BaseTraceType']:
+    def traces(self) -> typ.Tuple['BaseTraceHierarchyType']:
         return self._traces
 
     @traces.setter
@@ -286,7 +289,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         self._send_restyle_msg({prop: send_val}, trace_indexes=trace_index)
 
-    def add_traces(self, traces: typ.List['BaseTraceType']):
+    def add_traces(self, traces: typ.List['BaseTraceHierarchyType']):
 
         if not isinstance(traces, (list, tuple)):
             traces = [traces]
@@ -461,10 +464,70 @@ class BaseFigureWidget(widgets.DOMWidget):
         if not callback_data:
             return
 
-        print(callback_data)
+        # TODO: bail if no callbacks are registered
 
-        # self._plotly_relayoutPython = None
+        # Get event type
+        # --------------
+        event_type = callback_data['event_type']
 
+        # Build Selector Object
+        # ---------------------
+        if callback_data.get('selector', None):
+            selector_data = callback_data['selector']
+            selector_type = selector_data['type']
+            if selector_type == 'box':
+                selector = BoxSelector(**selector_data)
+            elif selector_type == 'lasso':
+                selector = LassoSelector(**selector_data)
+            else:
+                raise ValueError('Unsupported selector type: %s' % selector_type)
+        else:
+            selector = None
+
+        # Build State Object
+        # ------------------
+        if callback_data.get('state', None):
+            state_data = callback_data['state']
+            state = InputState(**state_data)
+        else:
+            state = None
+
+        # Build Trace Points Dictionary
+        # -----------------------------
+        points_data = callback_data['points']
+        trace_points = {}
+        for x, y, point_ind, trace_ind in zip(points_data['xs'],
+                                                  points_data['ys'],
+                                                  points_data['pointNumbers'],
+                                                  points_data['curveNumbers']):
+            if trace_ind not in trace_points:
+                trace_points[trace_ind] = {'point_inds': [],
+                                           'xs': [],
+                                           'ys': [],
+                                           'trace_name': self._traces[trace_ind].name,
+                                           'trace_index': trace_ind}
+
+            trace_dict = trace_points[trace_ind]
+            trace_dict['xs'].append(x)
+            trace_dict['ys'].append(y)
+            trace_dict['point_inds'].append(point_ind)
+
+        # Dispatch callbacks
+        # ------------------
+        for trace_ind, trace_points_data in trace_points.items():
+            points = Points(**trace_points_data)
+            trace = self.traces[trace_ind]  # type: BaseTraceType
+
+            if event_type == 'plotly_click':
+                trace._dispatch_on_click(points, state)
+            elif event_type == 'plotly_hover':
+                trace._dispatch_on_hover(points, state)
+            elif event_type == 'plotly_unhover':
+                trace._dispatch_on_unhover(points, state)
+            elif event_type == 'plotly_selected':
+                trace._dispatch_on_selected(points, selector)
+
+        self._plotly_pointsCallback = None
 
     # Static helpers
     # --------------
@@ -698,7 +761,23 @@ class BasePlotlyType:
         self._update_child(child, prop, val)
 
 
-class BaseTraceType(BasePlotlyType):
+class BaseLayoutHierarchyType(BasePlotlyType):
+
+    # _send_relayout analogous to _send_restyle above
+    def __init__(self, type_name):
+        super().__init__(type_name)
+
+    def _send_update(self, prop, val):
+        if self.parent:
+            self.parent._relayout_child(self, prop, val)
+
+
+class BaseLayoutType(BaseLayoutHierarchyType):
+    def __init__(self, type_name):
+        super().__init__(type_name)
+
+
+class BaseTraceHierarchyType(BasePlotlyType):
 
     def __init__(self, type_name):
         super().__init__(type_name)
@@ -708,12 +787,84 @@ class BaseTraceType(BasePlotlyType):
             self.parent._restyle_child(self, prop, val)
 
 
-class BaseLayoutType(BasePlotlyType):
-
-    # _send_relayout analogous to _send_restyle above
+class BaseTraceType(BaseTraceHierarchyType):
     def __init__(self, type_name):
         super().__init__(type_name)
 
-    def _send_update(self, prop, val):
-        if self.parent:
-            self.parent._relayout_child(self, prop, val)
+        self._hover_callbacks = []
+        self._unhover_callbacks = []
+        self._click_callbacks = []
+        self._select_callbacks = []
+
+    # Hover
+    # -----
+    def on_hover(self,
+                 callback: typ.Callable[['BaseTraceType', Points, InputState], None],
+                 append=False):
+        """
+        Register callback to be called when the user hovers over a point from this trace
+
+        Parameters
+        ----------
+        callback
+            Callable that accepts 3 arguments
+
+            - This trace
+            - Points object
+            - InputState object
+
+        append :
+
+        Returns
+        -------
+        None
+        """
+        if not append:
+            self._hover_callbacks.clear()
+
+        if callback:
+            self._hover_callbacks.append(callback)
+
+    def _dispatch_on_hover(self, points: Points, state: InputState):
+        for callback in self._hover_callbacks:
+            callback(self, points, state)
+
+    # Unhover
+    # -------
+    def on_unhover(self, callback: typ.Callable[['BaseTraceType', Points, InputState], None], append=False):
+        if not append:
+            self._unhover_callbacks.clear()
+
+        if callback:
+            self._unhover_callbacks.append(callback)
+
+    def _dispatch_on_unhover(self, points: Points, state: InputState):
+        for callback in self._unhover_callbacks:
+            callback(self, points, state)
+
+    # Click
+    # -----
+    def on_click(self, callback: typ.Callable[['BaseTraceType', Points, InputState], None], append=False):
+        if not append:
+            self._click_callbacks.clear()
+        if callback:
+            self._click_callbacks.append(callback)
+
+    def _dispatch_on_click(self, points: Points, state: InputState):
+        for callback in self._click_callbacks:
+            callback(self, points, state)
+
+    # Select
+    # ------
+    def on_selected(self,
+                    callback: typ.Callable[['BaseTraceType', Points, typ.Union[BoxSelector, LassoSelector]], None],
+                    append=False):
+        if not append:
+            self._select_callbacks.clear()
+
+        if callback:
+            self._select_callbacks.append(callback)
+
+    def _dispatch_on_selected(self, points: Points, selector: typ.Union[BoxSelector, LassoSelector]):
+        for callback in self._select_callbacks:
+            callback(self, points, selector)

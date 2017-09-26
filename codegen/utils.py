@@ -248,7 +248,10 @@ class TraceNode(PlotlyNode):
 
     @property
     def base_datatype_class(self):
-        return 'BaseTraceType'
+        if len(self.trace_path) == 0:
+            return 'BaseTraceType'
+        else:
+            return 'BaseTraceHierarchyType'
 
     @property
     def base_name(self):
@@ -288,7 +291,10 @@ class LayoutNode(PlotlyNode):
 
     @property
     def base_datatype_class(self):
-        return 'BaseLayoutType'
+        if len(self.trace_path) == 0:
+            return 'BaseLayoutType'
+        else:
+            return 'BaseLayoutHierarchyType'
 
     @property
     def base_name(self):
