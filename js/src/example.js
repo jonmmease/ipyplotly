@@ -271,6 +271,10 @@ var FigureView = widgets.DOMWidgetView.extend({
     },
 
     handle_plotly_restyle: function (data) {
+        if (data[0].hasOwnProperty('_doNotReportToPy')) {
+            // Restyle originated on the Python side
+            return
+        }
         console.log("plotly_restyle");
         console.log(data);
 
@@ -300,6 +304,11 @@ var FigureView = widgets.DOMWidgetView.extend({
     },
 
     handle_plotly_relayout: function (data) {
+        if (data.hasOwnProperty('_doNotReportToPy')) {
+            // Relayout originated on the Python side
+            return
+        }
+
         console.log("plotly_relayout");
         console.log(data);
 
@@ -482,6 +491,7 @@ var FigureView = widgets.DOMWidgetView.extend({
                 fullDataPres[i] = this.clone_fullData_metadata(this.el._fullData[idx[i]]);
             }
 
+            style['_doNotReportToPy'] = true;
             Plotly.restyle(this.el, style, idx);
 
             var traceDeltas = Array(idx.length);
@@ -504,6 +514,8 @@ var FigureView = widgets.DOMWidgetView.extend({
         var data = this.model.get('_plotly_relayout');
         if (data !== null) {
             console.log(data);
+
+            data['_doNotReportToPy'] = true;
             Plotly.relayout(this.el, data);
 
             var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
@@ -565,6 +577,9 @@ var FigureView = widgets.DOMWidgetView.extend({
                             // new object is not empty
                             res[p] = full_obj;
                         }
+                    } else if (typeof full_val === 'object' && !Array.isArray(full_val)) {
+                        res[p] = this.create_delta_object({}, full_val);
+
                     } else if (full_val !== undefined) {
                         res[p] = full_val;
                     }

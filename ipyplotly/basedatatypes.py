@@ -146,7 +146,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         else:
             trace_inds = list(range(len(self.traces)))
 
-        self._perform_restyle(restyle_data, trace_inds)
+        self.restyle(restyle_data, trace_inds)
 
     # Traces
     # ------
@@ -410,7 +410,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             # Remove 'lastInputTime'. Seems to be an internal plotly property that is introduced for some plot types
             relayout_data.pop('lastInputTime')
 
-        self._perform_relayout(relayout_data)
+        self.relayout(relayout_data)
 
     def relayout(self, relayout_data):
         relayout_msg = self._perform_relayout(relayout_data)
@@ -559,7 +559,9 @@ class BaseFigureWidget(widgets.DOMWidget):
                 else:
                     trace_data[p] = delta_val
         elif isinstance(trace_data, list):
-            assert isinstance(delta_data, list)
+            if not isinstance(delta_data, list):
+                raise ValueError('unexpected data type: {trace_data} {delta_data}'.format(
+                    trace_data=trace_data, delta_data=delta_data))
 
             for i, delta_val in enumerate(delta_data):
                 if i >= len(trace_data):
