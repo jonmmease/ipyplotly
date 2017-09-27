@@ -265,7 +265,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                             trace_data.pop(last_key)
                             any_vals_changed = True
                     else:
-                        if last_key not in trace_data or not vals_equal_or_close(trace_data[last_key], trace_v):
+                        if last_key not in trace_data or trace_data[last_key] != trace_v:
                             trace_data[last_key] = trace_v
                             any_vals_changed = True
 
@@ -434,7 +434,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             if v is None and last_key in val_parent:
                 val_parent.pop(last_key)
                 relayout_msg[raw_key] = None
-            elif v is not None and (last_key not in val_parent or not vals_equal_or_close(val_parent[last_key], v)):
+            elif v is not None and (last_key not in val_parent or val_parent[last_key] != v):
                 val_parent[last_key] = v
                 relayout_msg[raw_key] = v
 
@@ -572,18 +572,6 @@ class BaseFigureWidget(widgets.DOMWidget):
                     BaseFigureWidget.apply_dict_delta(trace_val, delta_val)
                 else:
                     trace_data[i] = delta_val
-
-
-def vals_equal_or_close(v1, v2):
-    if v1 == v2:
-        return True
-    else:
-        # See if values are almost equal
-        if isinstance(v1, float) and isinstance(v2, float):
-            return isclose(v1, v2)
-        elif isinstance(v1, (list, tuple)) and isinstance(v2, (list, tuple)) and len(v1) == len(v2):
-            return all([vals_equal_or_close(e1, e2) for e1, e2 in zip(v1, v2)])
-        return False
 
 
 class BasePlotlyType:
