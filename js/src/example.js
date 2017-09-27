@@ -271,7 +271,7 @@ var FigureView = widgets.DOMWidgetView.extend({
     },
 
     handle_plotly_restyle: function (data) {
-        if (data[0].hasOwnProperty('_doNotReportToPy')) {
+        if (data !== null && data !== undefined && data[0].hasOwnProperty('_doNotReportToPy')) {
             // Restyle originated on the Python side
             return
         }
@@ -304,7 +304,7 @@ var FigureView = widgets.DOMWidgetView.extend({
     },
 
     handle_plotly_relayout: function (data) {
-        if (data.hasOwnProperty('_doNotReportToPy')) {
+        if (data !== null && data !== undefined && data.hasOwnProperty('_doNotReportToPy')) {
             // Relayout originated on the Python side
             return
         }
