@@ -23,7 +23,7 @@ def build_validators_py(parent_node: PlotlyNode):
         buffer.write(f"""
         
 class {datatype_node.name_validator}(bv.{datatype_node.datatype_pascal_case}Validator):
-    def __init__(self):""")
+s    def __init__(self, prop_name='{datatype_node.name_property}'):""")
 
         # Add import
         if datatype_node.is_compound:
@@ -31,7 +31,7 @@ class {datatype_node.name_validator}(bv.{datatype_node.datatype_pascal_case}Vali
         from ipyplotly.datatypes{parent_node.pkg_str} import {datatype_node.name_pascal_case}""")
 
         buffer.write(f"""
-        super().__init__(name='{datatype_node.name_property}',
+        super().__init__(name=prop_name,
                          parent_name='{datatype_node.parent_dir_str}'""")
 
         if datatype_node.is_array_element:
@@ -43,8 +43,13 @@ class {datatype_node.name_validator}(bv.{datatype_node.datatype_pascal_case}Vali
         else:
             assert datatype_node.is_simple
 
+            excluded_props = ['valType', 'description', 'role', 'dflt']
+            if datatype_node.datatype == 'subplotid':
+                # Default is required for subplotid validator
+                excluded_props.remove('dflt')
+
             attr_nodes = [n for n in datatype_node.simple_attrs
-                          if n.name not in ['valType', 'description', 'role', 'dflt']]
+                          if n.name not in excluded_props]
             for i, attr_node in enumerate(attr_nodes):
                 buffer.write(f""",
                          {attr_node.name_undercase}={repr(attr_node.node_data)}""")

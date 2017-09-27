@@ -104,12 +104,11 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         \"\"\"
         {subtype_description}
         \"\"\"
-        return self._{subtype_node.name_property}
+        return self._compound_props.get('{subtype_node.name_property}', None)
 
     @{subtype_node.name_property}.setter
     def {subtype_node.name_property}(self, val):
-        self._{subtype_node.name_property} = self.{prop_set_method}('{subtype_node.name_property}', val, 
-        self._{subtype_node.name_property})\n""")
+        self.{prop_set_method}('{subtype_node.name_property}', val)\n""")
 
 
         # ### Literals ###
@@ -130,7 +129,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         add_docstring(buffer, compound_node)
 
         buffer.write(f"""
-        super().__init__('{compound_node.name_property}')
+        super().__init__('{compound_node.name_property}', **kwargs)
         
         # Initialize validators
         # ---------------------""")
@@ -143,11 +142,11 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         if compound_subtype_nodes:
             buffer.write(f"""
         
-        # Init compound properties
-        # ------------------------""")
-            for compound_subtype_node in compound_subtype_nodes:
-                buffer.write(f"""
-        self._{compound_subtype_node.name_property} = None""")
+        # # Init compound properties
+        # # ------------------------""")
+        #     for compound_subtype_node in compound_subtype_nodes:
+        #         buffer.write(f"""
+        # self._{compound_subtype_node.name_property} = None""")
 
         buffer.write(f"""
         
@@ -173,11 +172,12 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
 
 def add_constructor_params(buffer, compound_node, colon=True):
     for i, subtype_node in enumerate(compound_node.child_datatypes):
-        # dflt = subtype_node.node_data.get('dflt', None)
         dflt = None
-        is_last = i == len(compound_node.child_datatypes) - 1
         buffer.write(f""",
             {subtype_node.name_property}={repr(dflt)}""")
+
+    buffer.write(""",
+            **kwargs""")
     buffer.write(f"""
         ){':' if colon else ''}""")
 

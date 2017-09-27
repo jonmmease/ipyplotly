@@ -633,9 +633,10 @@ class SubplotidValidator(BaseValidator):
             "otherOpts": []
         },
     """
-    def __init__(self, name, parent_name, dflt=None, **_):
+    def __init__(self, name, parent_name, dflt, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
+        self.regex = dflt + "(\d*)"
 
     def validate_coerce(self, v):
         if v is None:
@@ -645,12 +646,20 @@ class SubplotidValidator(BaseValidator):
                               "Received value of type {typ}").format(name=self.name,
                                                                      parent_name=self.parent_name,
                                                                      typ=type(v)))
-        elif not v.startswith(self.default):
+        elif not re.fullmatch(self.regex, v):
             raise ValueError(("The {name} property of {parent_name} must be a string prefixed by '{default}', "
                               "optionally followed by an integer > 1\n"
                               "Received '{v}'").format(name=self.name,
                                                        parent_name=self.parent_name,
                                                        default=self.default, v=v))
+        else:
+            digit_str = re.fullmatch(self.regex, v).group(1)
+            if len(digit_str) > 0 and int(digit_str) in [0, 1]:
+                raise ValueError(("The {name} property of {parent_name} must be a string prefixed by '{default}', "
+                                  "optionally followed by an integer > 1\n"
+                                  "Received '{v}'").format(name=self.name,
+                                                           parent_name=self.parent_name,
+                                                           default=self.default, v=v))
         return v
 
 
@@ -850,7 +859,7 @@ class CompoundValidator(BaseValidator):
                                                                      parent_name=self.parent_name,
                                                                      cls_name=self.data_class.__name__,
                                                                      typ=type(v)))
-
+        v._prop_name = self.name
         return v
 
 

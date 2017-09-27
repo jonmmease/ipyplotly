@@ -7,6 +7,8 @@ from math import isclose
 import ipywidgets as widgets
 from traitlets import List, Unicode, Dict, default, observe
 
+from ipyplotly.callbacks import Points, BoxSelector, LassoSelector, InputState
+from ipyplotly.validators.layout import XaxisValidator, YaxisValidator, GeoValidator, TernaryValidator, SceneValidator
 
 # TODO:
 # Callbacks
@@ -25,7 +27,7 @@ from traitlets import List, Unicode, Dict, default, observe
 #   - on_change('property', listener())
 #   Triggering these could be tricky for events that originate on JS side
 #
-from ipyplotly.callbacks import Points, BoxSelector, LassoSelector, InputState
+
 
 
 @widgets.register
@@ -393,7 +395,9 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     def _relayout_child(self, child, prop, val):
         send_val = val  # Don't wrap in a list for relayout
-        self._send_relayout_msg({prop: send_val})
+        relayout_msg = {prop: send_val}
+        self._dispatch_to_relayout_callbacks(relayout_msg)
+        self._send_relayout_msg(relayout_msg)
 
     def _send_relayout_msg(self, layout):
         # print('Relayout (Py->JS): {layout}'.format(layout=layout))
@@ -415,6 +419,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     def relayout(self, relayout_data):
         relayout_msg = self._perform_relayout(relayout_data)
         if relayout_msg:
+            self._dispatch_to_relayout_callbacks(relayout_msg)
             self._send_relayout_msg(relayout_msg)
 
     def _perform_relayout(self, relayout_data):
@@ -439,6 +444,15 @@ class BaseFigureWidget(widgets.DOMWidget):
                 relayout_msg[raw_key] = v
 
         return relayout_msg
+
+    def _dispatch_to_relayout_callbacks(self, relayout_msg):
+        dispatch_zoom = False
+        zoom_paths = ['xaxis', ]
+        for prop_path_str, val in relayout_msg.items():
+            prop_path = self._str_to_dict_path(prop_path_str)
+
+            prop_path[:2] == ['']
+
 
     @staticmethod
     def _str_to_dict_path(raw_key):
@@ -575,12 +589,17 @@ class BaseFigureWidget(widgets.DOMWidget):
 
 
 class BasePlotlyType:
-    def __init__(self, type_name):
-        self.type_name = type_name
+    def __init__(self, prop_name):
+        self._prop_name = prop_name
         # self._data = {}
         self._validators = {}
-        self._orphan_data = {} # properties dict for use while object has no parent
+        self._compound_props = {}
+        self._orphan_data = {}  # properties dict for use while object has no parent
         self._parent = None
+
+    @property
+    def prop_name(self):
+        return self._prop_name
 
     @property
     def _data(self):
@@ -601,20 +620,20 @@ class BasePlotlyType:
     def _init_child_data(self, child):
         self.parent._init_child_data(self)
         self_data = self.parent._get_child_data(self)
-        if child.type_name not in self_data:
-            self_data[child.type_name] = {}
+        if child.prop_name not in self_data:
+            self_data[child.prop_name] = {}
 
     def _get_child_data(self, child):
         self_data = self.parent._get_child_data(self)
         if self_data is None:
             return None
         else:
-            child_or_children = getattr(self, '_' + child.type_name)
+            child_or_children = self._compound_props[child.prop_name]
             if child is child_or_children:
-                return self_data.get(child.type_name, None)
+                return self_data.get(child.prop_name, None)
             elif isinstance(child_or_children, (list, tuple)):
                 child_ind = child_or_children.index(child)
-                children_data = self_data.get(child.type_name, None)
+                children_data = self_data.get(child.prop_name, None)
                 return children_data[child_ind] if children_data is not None else None
             else:
                 ValueError('Unexpected child: %s' % child_or_children)
@@ -631,12 +650,12 @@ class BasePlotlyType:
         if self_delta is None:
             return None
         else:
-            child_or_children = getattr(self, '_' + child.type_name)
+            child_or_children = self._compound_props[child.prop_name]
             if child is child_or_children:
-                return self_delta.get(child.type_name, None)
+                return self_delta.get(child.prop_name, None)
             elif isinstance(child_or_children, (list, tuple)):
                 child_ind = child_or_children.index(child)
-                children_data = self_delta.get(child.type_name, None)
+                children_data = self_delta.get(child.prop_name, None)
                 return children_data[child_ind] if children_data is not None else None
             else:
                 ValueError('Unexpected child: %s' % child_or_children)
@@ -668,12 +687,13 @@ class BasePlotlyType:
                 self._data[prop] = val
                 self._send_update(prop, val)
 
-    def _set_compound_prop(self, prop, val, curr_val: 'BasePlotlyType'):
+    def _set_compound_prop(self, prop, val):
         # Validate coerce new value
         validator = self._validators.get(prop)
         val = validator.validate_coerce(val)  # type: BasePlotlyType
 
         # Grab deep copies of current and new states
+        curr_val = self._compound_props.get(prop, None)
         if curr_val is not None:
             curr_dict_val = deepcopy(curr_val._data)
         else:
@@ -705,14 +725,16 @@ class BasePlotlyType:
                 curr_val._orphan_data.update(curr_dict_val)
             curr_val._parent = None
 
+        self._compound_props[prop] = val
         return val
 
-    def _set_array_prop(self, prop, val, curr_val):
+    def _set_array_prop(self, prop, val):
         # Validate coerce new value
         validator = self._validators.get(prop)
         val = validator.validate_coerce(val)  # type: tuple
 
         # Update data dict
+        curr_val = self._compound_props.get(prop, None)
         if curr_val is not None:
             curr_dict_vals = [deepcopy(cv._data) for cv in curr_val]
         else:
@@ -746,22 +768,22 @@ class BasePlotlyType:
                 if cv_dict is not None:
                     cv._orphan_data.update(cv_dict)
                 cv._parent = None
-
+        self._compound_props[prop] = val
         return val
 
     def _send_update(self, prop, val):
         raise NotImplementedError()
 
     def _update_child(self, child, prop, val):
-        child_prop_val = getattr(self, child.type_name)
+        child_prop_val = getattr(self, child.prop_name)
         if isinstance(child_prop_val, (list, tuple)):
             child_ind = child_prop_val.index(child)
             obj_path = '{child_name}.{child_ind}.{prop}'.format(
-                child_name=child.type_name,
+                child_name=child.prop_name,
                 child_ind=child_ind,
                 prop=prop)
         else:
-            obj_path = '{child_name}.{prop}'.format(child_name=child.type_name, prop=prop)
+            obj_path = '{child_name}.{prop}'.format(child_name=child.prop_name, prop=prop)
 
         self._send_update(obj_path, val)
 
@@ -775,8 +797,8 @@ class BasePlotlyType:
 class BaseLayoutHierarchyType(BasePlotlyType):
 
     # _send_relayout analogous to _send_restyle above
-    def __init__(self, type_name):
-        super().__init__(type_name)
+    def __init__(self, prop_name):
+        super().__init__(prop_name)
 
     def _send_update(self, prop, val):
         if self.parent:
@@ -784,14 +806,67 @@ class BaseLayoutHierarchyType(BasePlotlyType):
 
 
 class BaseLayoutType(BaseLayoutHierarchyType):
-    def __init__(self, type_name):
-        super().__init__(type_name)
+    _subplotid_prop_names = ['xaxis', 'yaxis', 'geo', 'ternary', 'scene']
+    _subplotid_validators = {'xaxis': XaxisValidator,
+                            'yaxis': YaxisValidator,
+                            'geo': GeoValidator,
+                            'ternary': TernaryValidator,
+                            'scene': SceneValidator}
+
+    _subplotid_prop_re = re.compile('(' + '|'.join(_subplotid_prop_names) + ')(\d+)')
+
+    def __init__(self, prop_name, **kwargs):
+        super().__init__(prop_name)
+        self._subplotid_props = {}
+        for prop, value in kwargs.items():
+            self._set_subplotid_prop(prop, value)
+
+    def _set_subplotid_prop(self, prop, value):
+        match = self._subplotid_prop_re.fullmatch(prop)
+        if match is None:
+            raise TypeError('Invalid Layout keyword argument {k}'.format(k=prop))
+
+        subplot_prop = match.group(1)
+        suffix_digit = int(match.group(2))
+        if suffix_digit in [0, 1]:
+            raise TypeError('Subplot properties may only be suffixed by an integer > 1\n'
+                            'Received {k}'.format(k=prop))
+
+        # Add validator
+        if prop not in self._validators:
+            validator = self._subplotid_validators[subplot_prop](prop_name=prop)
+            self._validators[prop] = validator
+
+        # Import value
+        self._subplotid_props[prop] = self._set_compound_prop(prop, value)
+
+    def __getattr__(self, item):
+        # Check for subplot access (e.g. xaxis2)
+        # Validate then call self._get_prop(item)
+        if item in self._subplotid_props:
+            return self._subplotid_props[item]
+
+        raise AttributeError("'Layout' object has no attribute '{item}'".format(item=item))
+
+    def __setattr__(self, prop, value):
+        # Check for subplot assignment (e.g. xaxis2)
+        # Call _set_compound_prop with the xaxis validator
+        match = self._subplotid_prop_re.fullmatch(prop)
+        if match is None:
+            # Try setting as ordinary property
+            super().__setattr__(prop, value)
+        else:
+            self._set_subplotid_prop(prop, value)
+
+    def __dir__(self):
+        # Include any active subplot values (xaxis2 etc.)
+        return super().__dir__() + list(self._subplotid_props.keys())
 
 
 class BaseTraceHierarchyType(BasePlotlyType):
 
-    def __init__(self, type_name):
-        super().__init__(type_name)
+    def __init__(self, prop_name):
+        super().__init__(prop_name)
 
     def _send_update(self, prop, val):
         if self.parent:
@@ -799,8 +874,8 @@ class BaseTraceHierarchyType(BasePlotlyType):
 
 
 class BaseTraceType(BaseTraceHierarchyType):
-    def __init__(self, type_name):
-        super().__init__(type_name)
+    def __init__(self, prop_name):
+        super().__init__(prop_name)
 
         self._hover_callbacks = []
         self._unhover_callbacks = []
