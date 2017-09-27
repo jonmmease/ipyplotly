@@ -141,10 +141,12 @@ class BaseFigureWidget(widgets.DOMWidget):
         # print('Restyle (JS->Py): {restyle_data}'.format(restyle_data=restyle_data))
         if len(restyle_msg) > 1 and restyle_msg[1] is not None:
             trace_inds = restyle_msg[1]
+            if not isinstance(trace_inds, (list, tuple)):
+                trace_inds = [trace_inds]
         else:
-            trace_inds = None
+            trace_inds = list(range(len(self.traces)))
 
-        self.restyle(restyle_data, trace_inds)
+        self._perform_restyle(restyle_data, trace_inds)
 
     # Traces
     # ------
@@ -384,6 +386,8 @@ class BaseFigureWidget(widgets.DOMWidget):
         new_layout._parent = self
         self._layout = new_layout
 
+        # TODO: clear deltas, clear property callbacks
+
         # Notify JS side
         self._send_relayout_msg(new_layout_data)
 
@@ -406,7 +410,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             # Remove 'lastInputTime'. Seems to be an internal plotly property that is introduced for some plot types
             relayout_data.pop('lastInputTime')
 
-        self.relayout(relayout_data)
+        self._perform_relayout(relayout_data)
 
     def relayout(self, relayout_data):
         relayout_msg = self._perform_relayout(relayout_data)
@@ -425,8 +429,12 @@ class BaseFigureWidget(widgets.DOMWidget):
                 val_parent = val_parent[key_path_el]
 
             last_key = key_path[-1]
-            # print(f'{key_path}, {last_key}, {v}')
-            if last_key not in val_parent or not vals_equal_or_close(val_parent[last_key], v):
+            # print(f'{val_parent}, {key_path}, {last_key}, {v}')
+
+            if v is None and last_key in val_parent:
+                val_parent.pop(last_key)
+                relayout_msg[raw_key] = None
+            elif v is not None and (last_key not in val_parent or not vals_equal_or_close(val_parent[last_key], v)):
                 val_parent[last_key] = v
                 relayout_msg[raw_key] = v
 
