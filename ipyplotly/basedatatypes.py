@@ -254,6 +254,8 @@ class BaseFigureWidget(widgets.DOMWidget):
                         raise ValueError('Trace index {trace_ind} out of range'.format(trace_ind=trace_ind))
                     trace_data = self._traces_data[trace_ind]
                     for key_path_el in key_path[:-1]:
+                        if key_path_el not in trace_data:
+                            trace_data[key_path_el] = {}
                         trace_data = trace_data[key_path_el]
 
                     last_key = key_path[-1]
@@ -417,6 +419,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         self.relayout(relayout_data)
 
     def relayout(self, relayout_data):
+        # print(f'Relayout: {relayout_data}')
         relayout_msg = self._perform_relayout(relayout_data)
         if relayout_msg:
             self._dispatch_to_relayout_callbacks(relayout_msg)
@@ -431,6 +434,8 @@ class BaseFigureWidget(widgets.DOMWidget):
 
             val_parent = self._layout_data
             for key_path_el in key_path[:-1]:
+                if key_path_el not in val_parent:
+                    val_parent[key_path_el] = {}
                 val_parent = val_parent[key_path_el]
 
             last_key = key_path[-1]
