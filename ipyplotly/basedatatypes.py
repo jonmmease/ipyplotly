@@ -3,6 +3,7 @@ import re
 import typing as typ
 from copy import deepcopy
 from math import isclose
+from pprint import pprint
 
 import ipywidgets as widgets
 from traitlets import List, Unicode, Dict, default, observe
@@ -115,7 +116,8 @@ class BaseFigureWidget(widgets.DOMWidget):
     @observe('_plotly_restyleDelta')
     def handler_plotly_restyleDelta(self, change):
         deltas = change['new']
-        # print('addTraceDeltas msg: {deltas}'.format(deltas=deltas))
+        # print('restyleDelta msg')
+        # pprint(deltas)
 
         if not deltas:
             return
@@ -140,7 +142,9 @@ class BaseFigureWidget(widgets.DOMWidget):
             return
 
         restyle_data = restyle_msg[0]
-        # print('Restyle (JS->Py): {restyle_data}'.format(restyle_data=restyle_data))
+        # print('Restyle (JS->Py):')
+        # pprint(restyle_data)
+
         if len(restyle_msg) > 1 and restyle_msg[1] is not None:
             trace_inds = restyle_msg[1]
             if not isinstance(trace_inds, (list, tuple)):
@@ -149,6 +153,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             trace_inds = list(range(len(self.traces)))
 
         self.restyle(restyle_data, trace_inds)
+        self._plotly_restylePython = None
 
     # Traces
     # ------
@@ -278,35 +283,57 @@ class BaseFigureWidget(widgets.DOMWidget):
                     # At lease one of the values for one of the traces has changed. Update them all
                     restyle_data[raw_key] = restyle_msg_vs
 
+        # TODO: update restyle_delta to remove properties that were just set
+
         return restyle_data
 
     def _dispatch_change_callbacks_restyle(self, style, trace_indexes):
         if not isinstance(trace_indexes, list):
             trace_indexes = [trace_indexes]
 
-        for raw_key in style:
+        dispatch_plan = {t: {} for t in trace_indexes}
+        # e.g. {0: {(): {'obj': layout,
+        #            'changed_paths': [('xaxis', 'range')]}}}
+
+        for raw_key, v in style.items():
             key_path = self._str_to_dict_path(raw_key)
+
+            # Test whether we should remove trailing integer in path
+            # e.g. ('xaxis', 'range', '1') -> ('xaxis', 'range')
+            # We only do this if the trailing index is an integer that references a primitive value
+            if isinstance(key_path[-1], int) and not isinstance(v, dict):
+                key_path = key_path[:-1]
 
             for trace_ind in trace_indexes:
 
                 parent_obj = self.traces[trace_ind]
-
-                # Dispatch to layout
-                next_key = key_path[0]
-                next_val = parent_obj._get_prop(next_key)
-                parent_obj._dispatch_change_callbacks(next_key, next_val)
+                key_path_so_far = ()
+                keys_left = key_path
 
                 # Iterate down the key path
-                for next_key in key_path[1:]:
-
-                    parent_obj = next_val
+                for next_key in key_path:
                     if isinstance(parent_obj, BasePlotlyType):
-                        next_val = parent_obj._get_prop(next_key)
-                        parent_obj._dispatch_change_callbacks(next_key, next_val)
+                        if key_path_so_far not in dispatch_plan[trace_ind]:
+                            dispatch_plan[trace_ind][key_path_so_far] = {'obj': parent_obj, 'changed_paths': set()}
+
+                        dispatch_plan[trace_ind][key_path_so_far]['changed_paths'].add(keys_left)
+
+                        next_val = parent_obj.__getitem__(next_key)
                     elif isinstance(parent_obj, (list, tuple)):
                         next_val = parent_obj[next_key]
                     else:
                         break
+
+                    key_path_so_far = key_path_so_far + (next_key,)
+                    keys_left = keys_left[1:]
+                    parent_obj = next_val
+
+        # pprint(dispatch_plan)
+        for trace_ind in trace_indexes:
+            for p in dispatch_plan[trace_ind].values():
+                obj = p['obj']
+                changed_paths = p['changed_paths']
+                obj._dispatch_change_callbacks(changed_paths)
 
     def _send_restyle_msg(self, style, trace_indexes=None):
         if not isinstance(trace_indexes, (list, tuple)):
@@ -449,7 +476,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         self.relayout(relayout_data)
 
     def relayout(self, relayout_data):
-        # print(f'Relayout: {relayout_data}')
+        print(f'Relayout: {relayout_data}')
         relayout_msg = self._perform_relayout(relayout_data)
         if relayout_msg:
             self._dispatch_change_callbacks_relayout(relayout_msg)
@@ -458,6 +485,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     def _perform_relayout(self, relayout_data):
         relayout_msg = {}  # relayout data to send to JS side as Plotly.relayout()
 
+        # Update layout_data
         for raw_key, v in relayout_data.items():
             # kstr may have periods. e.g. foo.bar
             key_path = self._str_to_dict_path(raw_key)
@@ -478,31 +506,49 @@ class BaseFigureWidget(widgets.DOMWidget):
                 val_parent[last_key] = v
                 relayout_msg[raw_key] = v
 
+        # TODO: Update layout_delta: Remove values that were set explicitly
         return relayout_msg
 
     def _dispatch_change_callbacks_relayout(self, relayout_msg):
-        for raw_key in relayout_msg:
+        dispatch_plan = {}  # e.g. {(): {'obj': layout,
+                            #            'changed_paths': [('xaxis', 'range')]}}
+        for raw_key, v in relayout_msg.items():
             # kstr may have periods. e.g. foo.bar
             key_path = self._str_to_dict_path(raw_key)
 
-            parent_obj = self.layout
+            # Test whether we should remove trailing integer in path
+            # e.g. ('xaxis', 'range', '1') -> ('xaxis', 'range')
+            # We only do this if the trailing index is an integer that references a primitive value
+            if isinstance(key_path[-1], int) and not isinstance(v, dict):
+                key_path = key_path[:-1]
 
-            # Dispatch to layout
-            next_key = key_path[0]
-            next_val = parent_obj._get_prop(next_key)
-            parent_obj._dispatch_change_callbacks(next_key, next_val)
+            parent_obj = self.layout
+            key_path_so_far = ()
+            keys_left = key_path
 
             # Iterate down the key path
-            for next_key in key_path[1:]:
-
-                parent_obj = next_val
+            for next_key in key_path:
                 if isinstance(parent_obj, BasePlotlyType):
-                    next_val = parent_obj._get_prop(next_key)
-                    parent_obj._dispatch_change_callbacks(next_key, next_val)
+                    if key_path_so_far not in dispatch_plan:
+                        dispatch_plan[key_path_so_far] = {'obj': parent_obj, 'changed_paths': set()}
+                    dispatch_plan[key_path_so_far]['changed_paths'].add(keys_left)
+
+                    next_val = parent_obj.__getitem__(next_key)
+                    # parent_obj._dispatch_change_callbacks(next_key, next_val)
                 elif isinstance(parent_obj, (list, tuple)):
                     next_val = parent_obj[next_key]
                 else:
                     break
+
+                key_path_so_far = key_path_so_far + (next_key,)
+                keys_left = keys_left[1:]
+                parent_obj = next_val
+
+        # pprint(dispatch_plan)
+        for p in dispatch_plan.values():
+            obj = p['obj']
+            changed_paths = p['changed_paths']
+            obj._dispatch_change_callbacks(changed_paths)
 
     @staticmethod
     def _str_to_dict_path(raw_key):
@@ -527,7 +573,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             except ValueError as _:
                 pass
 
-        return key_path2
+        return tuple(key_path2)
 
     # Callbacks
     # ---------
@@ -646,6 +692,7 @@ class BasePlotlyType:
         self._compound_props = {}
         self._orphan_data = {}  # properties dict for use while object has no parent
         self._parent = None
+        self._change_callbacks = {}  # type: typ.Dict[typ.Tuple, typ.Callable]
 
     @property
     def prop_name(self):
@@ -714,15 +761,23 @@ class BasePlotlyType:
     def parent(self):
         return self._parent
 
-    def _get_prop(self, prop):
-        if prop in self._compound_props:
-            return self._compound_props[prop]
-        elif self._data is not None and prop in self._data:
-            return self._data[prop]
-        elif self._delta is not None:
-            return self._delta.get(prop, None)
+    def __getitem__(self, prop):
+        if isinstance(prop, tuple):
+            res = self
+            for p in prop:
+                res = res[p]
+
+            return res
         else:
-            return None
+            if prop in self._compound_props:
+                return self._compound_props[prop]
+            elif self._data is not None and prop in self._data:
+                return self._data[prop]
+            elif self._delta is not None:
+                return self._delta.get(prop, None)
+            else:
+                # TODO: Only None if this is a valid path. ValueError otherwise
+                return None
 
     def _set_prop(self, prop, val):
         validator = self._validators.get(prop)
@@ -847,8 +902,46 @@ class BasePlotlyType:
 
     # Callbacks
     # ---------
-    def _dispatch_change_callbacks(self, prop, value):
-        print(f'change callback: {self} - {self.prop_name} - {prop} = {value}')
+    def _dispatch_change_callbacks(self, changed_paths):
+        # print(f'change callback: {self} - {self.prop_name} - {changed_paths}')
+        changed_paths = set(changed_paths)
+        # pprint(changed_paths)
+        for callback_paths, callback in self._change_callbacks.items():
+            # pprint(set(callback_paths))
+            common_paths = changed_paths.intersection(set(callback_paths))
+            if common_paths:
+                # Invoke callback
+                callback_args = [self.__getitem__(cb_path) for cb_path in callback_paths]
+                callback(self, *callback_args)
+
+    def on_change(self, callback, *args):
+        """
+        Register callback function to be called with a properties or subproperties of this object are modified
+
+        Parameters
+        ----------
+        callback : function
+            Function that accepts 1 + len(args) parameters. First parameter is this object. Second throug last
+            parameters are the values referenced by args
+        args : str or tuple(str)
+            Property name (for direct properties) or tuple of property names / indices (for sub properties). Callback
+            will be invoked whenever ANY of these properties is modified. Furthermore. The callback will only be
+            invoked once even if multiple properties are modified during the same restyle operation.
+
+        Returns
+        -------
+
+        """
+
+        if len(args) == 0:
+            raise ValueError('At least one property/subproperty must be specified')
+
+        # TODO: Validate that args valid properties / subproperties
+        validated_args = tuple(sorted([a if isinstance(a, tuple) else (a,) for a in args]))
+
+        # TODO: add append arg and store list of callbacks
+        self._change_callbacks[validated_args] = callback
+
 
 class BaseLayoutHierarchyType(BasePlotlyType):
 

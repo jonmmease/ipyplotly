@@ -76,40 +76,31 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
             subtype_description = '\n'.join(textwrap.wrap(raw_description,
                                                           subsequent_indent=' ' * 8,
                                                           width=119 - 8))
+            # #### Get property ###
+            buffer.write(f"""\
+
+    # {subtype_node.name_property}
+    # {'-' * len(subtype_node.name_property)}
+    @property
+    def {subtype_node.name_property}(self) -> {prop_type}:
+        \"\"\"
+        {subtype_description}
+        \"\"\"
+        return self['{subtype_node.name_property}']""")
+
+            # #### Set property ###
             if subtype_node.is_simple:
-                buffer.write(f"""\
+                prop_set_method = '_set_prop'
+            elif subtype_node.is_array_element:
+                prop_set_method = '_set_array_prop'
+            else:
+                prop_set_method = '_set_compound_prop'
 
-    # {subtype_node.name_property}
-    # {'-' * len(subtype_node.name_property)}
-    @property
-    def {subtype_node.name_property}(self) -> {prop_type}:
-        \"\"\"
-        {subtype_description}
-        \"\"\"
-        return self._get_prop('{subtype_node.name_property}')
-        
-    @{subtype_node.name_property}.setter
-    def {subtype_node.name_property}(self, val):
-        self._set_prop('{subtype_node.name_property}', val)\n""")
-
-            else:  # node is compound or array node
-                prop_set_method = '_set_array_prop' if subtype_node.is_array_element else '_set_compound_prop'
-
-                buffer.write(f"""\
-
-    # {subtype_node.name_property}
-    # {'-' * len(subtype_node.name_property)}
-    @property
-    def {subtype_node.name_property}(self) -> {prop_type}:
-        \"\"\"
-        {subtype_description}
-        \"\"\"
-        return self._compound_props.get('{subtype_node.name_property}', None)
+            buffer.write(f"""
 
     @{subtype_node.name_property}.setter
     def {subtype_node.name_property}(self, val):
         self.{prop_set_method}('{subtype_node.name_property}', val)\n""")
-
 
         # ### Literals ###
         for literal_node in literal_nodes:
@@ -119,7 +110,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
     # {'-' * len(literal_node.name_property)}
     @property
     def {literal_node.name_property}(self) -> {prop_type}:
-        return self._get_prop('{literal_node.name_property}')\n""")
+        return self['{literal_node.name_property}']\n""")
 
         # ### Constructor ###
         buffer.write(f"""
@@ -215,7 +206,11 @@ def write_datatypes_py(outdir, node: PlotlyNode):
     # --------------------
     datatype_source = build_datatypes_py(node)
     if datatype_source:
-        formatted_source = format_source(datatype_source)
+        try:
+            formatted_source = format_source(datatype_source)
+        except Exception as e:
+            print(datatype_source)
+            raise e
 
         # Write file
         # ----------

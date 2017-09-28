@@ -23,7 +23,7 @@ def build_validators_py(parent_node: PlotlyNode):
         buffer.write(f"""
         
 class {datatype_node.name_validator}(bv.{datatype_node.datatype_pascal_case}Validator):
-s    def __init__(self, prop_name='{datatype_node.name_property}'):""")
+    def __init__(self, prop_name='{datatype_node.name_property}'):""")
 
         # Add import
         if datatype_node.is_compound:
@@ -65,7 +65,11 @@ def write_validator_py(outdir, node: PlotlyNode):
     # --------------------
     validator_source = build_validators_py(node)
     if validator_source:
-        formatted_source = format_source(validator_source)
+        try:
+            formatted_source = format_source(validator_source)
+        except Exception as e:
+            print(validator_source)
+            raise e
 
         # Write file
         # ----------

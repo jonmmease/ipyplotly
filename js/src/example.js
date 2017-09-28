@@ -193,32 +193,39 @@ var FigureView = widgets.DOMWidgetView.extend({
     },
 
     buildPointsObject: function (data) {
-        var pointObjects = data['points'];
-        var numPoints = pointObjects.length;
-        var pointsObject = {
-            'curveNumbers': new Array(numPoints),
-            'pointNumbers': new Array(numPoints),
-            'xs': new Array(numPoints),
-            'ys': new Array(numPoints)
-        };
 
-        for (var p = 0; p < numPoints; p++) {
-            pointsObject['curveNumbers'][p] = pointObjects[p]['curveNumber'];
-            pointsObject['pointNumbers'][p] = pointObjects[p]['pointNumber'];
-            pointsObject['xs'][p] = pointObjects[p]['x'];
-            pointsObject['ys'][p] = pointObjects[p]['y'];
-        }
+        var pointsObject;
+        if (data.hasOwnProperty('points')) {
+            // Most cartesian plots
+            var pointObjects = data['points'];
+            var numPoints = pointObjects.length;
+            pointsObject = {
+                'curveNumbers': new Array(numPoints),
+                'pointNumbers': new Array(numPoints),
+                'xs': new Array(numPoints),
+                'ys': new Array(numPoints)};
 
-        // Add z if present
-        var hasZ = pointObjects[0].hasOwnProperty('z');
-        if (hasZ) {
-            pointsObject['zs'] = new Array(numPoints);
-            for (p = 0; p < numPoints; p++) {
-                pointsObject['zs'][p] = pointObjects[p]['z'];
+
+                for (var p = 0; p < numPoints; p++) {
+                pointsObject['curveNumbers'][p] = pointObjects[p]['curveNumber'];
+                pointsObject['pointNumbers'][p] = pointObjects[p]['pointNumber'];
+                pointsObject['xs'][p] = pointObjects[p]['x'];
+                pointsObject['ys'][p] = pointObjects[p]['y'];
             }
-        }
 
-        return pointsObject
+            // Add z if present
+            var hasZ = pointObjects[0].hasOwnProperty('z');
+            if (hasZ) {
+                pointsObject['zs'] = new Array(numPoints);
+                for (p = 0; p < numPoints; p++) {
+                    pointsObject['zs'][p] = pointObjects[p]['z'];
+                }
+            }
+
+            return pointsObject
+        } else {
+            return null
+        }
     },
 
     buildMouseEventObject: function (data) {
@@ -275,8 +282,6 @@ var FigureView = widgets.DOMWidgetView.extend({
             // Restyle originated on the Python side
             return
         }
-        console.log("plotly_restyle");
-        console.log(data);
 
         // Work around some plotly bugs/limitations
         if (data === null || data === undefined) {
@@ -298,6 +303,9 @@ var FigureView = widgets.DOMWidgetView.extend({
                 }
             }
         }
+
+        console.log("plotly_restyle");
+        console.log(data);
 
         this.model.set('_plotly_restylePython', data);
         this.touch();
@@ -329,7 +337,6 @@ var FigureView = widgets.DOMWidgetView.extend({
 
     handle_plotly_click: function (data) {
         console.log("plotly_click");
-        console.log(data);
 
         if (data === null || data === undefined) return;
 
@@ -339,14 +346,16 @@ var FigureView = widgets.DOMWidgetView.extend({
             'state': this.buildMouseEventObject(data)
         };
 
-        console.log(pyData);
-        this.model.set('_plotly_pointsCallback', pyData);
-        this.touch();
+        if (pyData['points'] !== null) {
+            console.log(data);
+            console.log(pyData);
+            this.model.set('_plotly_pointsCallback', pyData);
+            this.touch();
+        }
     },
 
     handle_plotly_hover: function (data) {
         console.log("plotly_hover");
-        console.log(data);
 
         if (data === null || data === undefined) return;
 
@@ -356,14 +365,16 @@ var FigureView = widgets.DOMWidgetView.extend({
             'state': this.buildMouseEventObject(data)
         };
 
-        console.log(pyData);
-        this.model.set('_plotly_pointsCallback', pyData);
-        this.touch();
+        if (pyData['points'] !== null && pyData['points'] !== undefined) {
+            console.log(data);
+            console.log(pyData);
+            this.model.set('_plotly_pointsCallback', pyData);
+            this.touch();
+        }
     },
 
     handle_plotly_unhover: function (data) {
         console.log("plotly_unhover");
-        console.log(data);
 
         if (data === null || data === undefined) return;
 
@@ -373,14 +384,16 @@ var FigureView = widgets.DOMWidgetView.extend({
             'state': this.buildMouseEventObject(data)
         };
 
-        console.log(pyData);
-        this.model.set('_plotly_pointsCallback', pyData);
-        this.touch();
+        if (pyData['points'] !== null) {
+            console.log(data);
+            console.log(pyData);
+            this.model.set('_plotly_pointsCallback', pyData);
+            this.touch();
+        }
     },
 
     handle_plotly_selected: function (data) {
         console.log("plotly_selected");
-        console.log(data);
 
         if (data === null ||
             data === undefined ||
@@ -392,9 +405,12 @@ var FigureView = widgets.DOMWidgetView.extend({
             'selector': this.buildSelectorObject(data),
         };
 
-        console.log(pyData);
-        this.model.set('_plotly_pointsCallback', pyData);
-        this.touch();
+        if (pyData['points'] !== null) {
+            console.log(data);
+            console.log(pyData);
+            this.model.set('_plotly_pointsCallback', pyData);
+            this.touch();
+        }
     },
 
     handle_plotly_doubleclick: function (data) {
