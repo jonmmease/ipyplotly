@@ -227,6 +227,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         restyle_msg = self._perform_restyle(style, trace_indexes)
         if restyle_msg:
+            self._dispatch_change_callbacks_restyle(restyle_msg, trace_indexes)
             self._send_restyle_msg(restyle_msg, trace_indexes=trace_indexes)
 
     def _perform_restyle(self, style, trace_indexes):
@@ -254,7 +255,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                         raise ValueError('Trace index {trace_ind} out of range'.format(trace_ind=trace_ind))
                     trace_data = self._traces_data[trace_ind]
                     for key_path_el in key_path[:-1]:
-                        if key_path_el not in trace_data:
+                        if isinstance(key_path_el, str) and key_path_el not in trace_data:
                             trace_data[key_path_el] = {}
                         trace_data = trace_data[key_path_el]
 
@@ -279,6 +280,34 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         return restyle_data
 
+    def _dispatch_change_callbacks_restyle(self, style, trace_indexes):
+        if not isinstance(trace_indexes, list):
+            trace_indexes = [trace_indexes]
+
+        for raw_key in style:
+            key_path = self._str_to_dict_path(raw_key)
+
+            for trace_ind in trace_indexes:
+
+                parent_obj = self.traces[trace_ind]
+
+                # Dispatch to layout
+                next_key = key_path[0]
+                next_val = parent_obj._get_prop(next_key)
+                parent_obj._dispatch_change_callbacks(next_key, next_val)
+
+                # Iterate down the key path
+                for next_key in key_path[1:]:
+
+                    parent_obj = next_val
+                    if isinstance(parent_obj, BasePlotlyType):
+                        next_val = parent_obj._get_prop(next_key)
+                        parent_obj._dispatch_change_callbacks(next_key, next_val)
+                    elif isinstance(parent_obj, (list, tuple)):
+                        next_val = parent_obj[next_key]
+                    else:
+                        break
+
     def _send_restyle_msg(self, style, trace_indexes=None):
         if not isinstance(trace_indexes, (list, tuple)):
             trace_indexes = [trace_indexes]
@@ -291,10 +320,11 @@ class BaseFigureWidget(widgets.DOMWidget):
     def _restyle_child(self, child, prop, val):
 
         send_val = [val]
-
         trace_index = self.traces.index(child)
+        restyle = {prop: send_val}
 
-        self._send_restyle_msg({prop: send_val}, trace_indexes=trace_index)
+        self._dispatch_change_callbacks_restyle(restyle, trace_index)
+        self._send_restyle_msg(restyle, trace_indexes=trace_index)
 
     def add_traces(self, traces: typ.List['BaseTraceHierarchyType']):
 
@@ -398,7 +428,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     def _relayout_child(self, child, prop, val):
         send_val = val  # Don't wrap in a list for relayout
         relayout_msg = {prop: send_val}
-        self._dispatch_to_relayout_callbacks(relayout_msg)
+        self._dispatch_change_callbacks_relayout(relayout_msg)
         self._send_relayout_msg(relayout_msg)
 
     def _send_relayout_msg(self, layout):
@@ -422,7 +452,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         # print(f'Relayout: {relayout_data}')
         relayout_msg = self._perform_relayout(relayout_data)
         if relayout_msg:
-            self._dispatch_to_relayout_callbacks(relayout_msg)
+            self._dispatch_change_callbacks_relayout(relayout_msg)
             self._send_relayout_msg(relayout_msg)
 
     def _perform_relayout(self, relayout_data):
@@ -434,7 +464,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
             val_parent = self._layout_data
             for key_path_el in key_path[:-1]:
-                if key_path_el not in val_parent:
+                if isinstance(key_path_el, str) and key_path_el not in val_parent:
                     val_parent[key_path_el] = {}
                 val_parent = val_parent[key_path_el]
 
@@ -450,14 +480,29 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         return relayout_msg
 
-    def _dispatch_to_relayout_callbacks(self, relayout_msg):
-        dispatch_zoom = False
-        zoom_paths = ['xaxis', ]
-        for prop_path_str, val in relayout_msg.items():
-            prop_path = self._str_to_dict_path(prop_path_str)
+    def _dispatch_change_callbacks_relayout(self, relayout_msg):
+        for raw_key in relayout_msg:
+            # kstr may have periods. e.g. foo.bar
+            key_path = self._str_to_dict_path(raw_key)
 
-            prop_path[:2] == ['']
+            parent_obj = self.layout
 
+            # Dispatch to layout
+            next_key = key_path[0]
+            next_val = parent_obj._get_prop(next_key)
+            parent_obj._dispatch_change_callbacks(next_key, next_val)
+
+            # Iterate down the key path
+            for next_key in key_path[1:]:
+
+                parent_obj = next_val
+                if isinstance(parent_obj, BasePlotlyType):
+                    next_val = parent_obj._get_prop(next_key)
+                    parent_obj._dispatch_change_callbacks(next_key, next_val)
+                elif isinstance(parent_obj, (list, tuple)):
+                    next_val = parent_obj[next_key]
+                else:
+                    break
 
     @staticmethod
     def _str_to_dict_path(raw_key):
@@ -670,7 +715,9 @@ class BasePlotlyType:
         return self._parent
 
     def _get_prop(self, prop):
-        if self._data is not None and prop in self._data:
+        if prop in self._compound_props:
+            return self._compound_props[prop]
+        elif self._data is not None and prop in self._data:
             return self._data[prop]
         elif self._delta is not None:
             return self._delta.get(prop, None)
@@ -798,6 +845,10 @@ class BasePlotlyType:
     def _relayout_child(self, child, prop, val):
         self._update_child(child, prop, val)
 
+    # Callbacks
+    # ---------
+    def _dispatch_change_callbacks(self, prop, value):
+        print(f'change callback: {self} - {self.prop_name} - {prop} = {value}')
 
 class BaseLayoutHierarchyType(BasePlotlyType):
 
