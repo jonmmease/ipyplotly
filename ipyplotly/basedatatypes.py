@@ -42,27 +42,30 @@ class BaseFigureWidget(widgets.DOMWidget):
     _model_module = Unicode('ipyplotly').tag(sync=True)
 
     # Data properties for front end
+    # Note: These are only automatically synced on full assignment, not on mutation
     _layout_data = Dict().tag(sync=True)
     _traces_data = List().tag(sync=True)
 
     # Python -> JS message properties
-    _plotly_addTraces = List(trait=Dict(),
-                             allow_none=True).tag(sync=True)
+    _py2js_addTraces = List(trait=Dict(),
+                            allow_none=True).tag(sync=True)
 
-    _plotly_restyle = List(allow_none=True).tag(sync=True)
-    _plotly_relayout = Dict(allow_none=True).tag(sync=True)
+    _py2js_restyle = List(allow_none=True).tag(sync=True)
+    _py2js_relayout = Dict(allow_none=True).tag(sync=True)
 
-    _plotly_deleteTraces = List(allow_none=True).tag(sync=True)
-    _plotly_moveTraces = List(allow_none=True).tag(sync=True)
+    _py2js_deleteTraces = List(allow_none=True).tag(sync=True)
+    _py2js_moveTraces = List(allow_none=True).tag(sync=True)
+
+    _py2js_removeLayoutProps = List(allow_none=True).tag(sync=True)
 
     # JS -> Python message properties
-    _plotly_restyleDelta = List(allow_none=True).tag(sync=True)
-    _plotly_relayoutDelta = Dict(allow_none=True).tag(sync=True)
-    _plotly_restylePython = List(allow_none=True).tag(sync=True)
-    _plotly_relayoutPython = Dict(allow_none=True).tag(sync=True)
+    _js2py_styleDelta = List(allow_none=True).tag(sync=True)
+    _js2py_layoutDelta = Dict(allow_none=True).tag(sync=True)
+    _js2py_restyle = List(allow_none=True).tag(sync=True)
+    _js2py_relayout = Dict(allow_none=True).tag(sync=True)
 
     # For plotly_select/hover/unhover/click
-    _plotly_pointsCallback = Dict(allow_none=True).tag(sync=True)
+    _js2py_pointsCallback = Dict(allow_none=True).tag(sync=True)
 
     # Constructor
     # -----------
@@ -105,15 +108,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._layout_delta = {}
 
     # ### Trait methods ###
-    @default('_plotly_addTraces')
-    def _plotly_addTraces_default(self):
-        return None
-
-    @default('_plotly_restyle')
-    def _plotly_restyle_default(self):
-        return None
-
-    @observe('_plotly_restyleDelta')
+    @observe('_js2py_styleDelta')
     def handler_plotly_restyleDelta(self, change):
         deltas = change['new']
         # print('restyleDelta msg')
@@ -133,9 +128,9 @@ class BaseFigureWidget(widgets.DOMWidget):
             BaseFigureWidget.apply_dict_delta(uid_trace._delta, delta)
 
         # Remove processed trace delta data
-        self._plotly_restyleDelta = None
+        self._js2py_styleDelta = None
 
-    @observe('_plotly_restylePython')
+    @observe('_js2py_restyle')
     def handler_plotly_restylePython(self, change):
         restyle_msg = change['new']
         if not restyle_msg:
@@ -153,7 +148,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             trace_inds = list(range(len(self.traces)))
 
         self.restyle(restyle_data, trace_inds)
-        self._plotly_restylePython = None
+        self._js2py_restyle = None
 
     # Traces
     # ------
@@ -203,8 +198,8 @@ class BaseFigureWidget(widgets.DOMWidget):
             del traces_deltas_post_removal[i]
 
         if remove_inds:
-            self._plotly_deleteTraces = remove_inds
-            self._plotly_deleteTraces = None
+            self._py2js_deleteTraces = remove_inds
+            self._py2js_deleteTraces = None
 
         # Compute move traces
         new_inds = []
@@ -215,7 +210,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         current_inds = list(range(len(traces_data_post_removal)))
 
         if not all([i1 == i2 for i1, i2 in zip(new_inds, current_inds)]):
-            self._plotly_moveTraces = [current_inds, new_inds]
+            self._py2js_moveTraces = [current_inds, new_inds]
 
         # Update _traces order
         self._traces_data = [_trace for i, _trace in sorted(zip(new_inds, traces_data_post_removal))]
@@ -341,8 +336,8 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         restype_msg = (style, trace_indexes)
         # print('Restyle (Py->JS): {msg}\n type: {typ}'.format(msg=restype_msg, typ=type(restype_msg)))
-        self._plotly_restyle = restype_msg
-        self._plotly_restyle = None
+        self._py2js_restyle = restype_msg
+        self._py2js_restyle = None
 
     def _restyle_child(self, child, prop, val):
 
@@ -376,8 +371,8 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         # Send to front end
         add_traces_msg = new_traces_data
-        self._plotly_addTraces = add_traces_msg
-        self._plotly_addTraces = None
+        self._py2js_addTraces = add_traces_msg
+        self._py2js_addTraces = None
 
         return traces
 
@@ -413,18 +408,23 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # Layout
     # ------
-    @observe('_plotly_relayoutDelta')
-    def handler_plotly_relayoutDelta(self, change):
+    @observe('_js2py_layoutDelta')
+    def handler_plotly_layoutDelta(self, change):
         delta = change['new']
 
         if not delta:
             return
 
-        # print('Relayout (JS->Py): {deltas}'.format(deltas=delta))
-        BaseFigureWidget.apply_dict_delta(self.layout._delta, delta)
-
+        # print('layoutDelta: {deltas}'.format(deltas=delta))
+        self._layout_delta = delta
+        # self.apply_dict_delta(self.layout._delta, delta)
         # Remove processed trace delta data
-        self._plotly_relayoutDelta = None
+        self._js2py_layoutDelta = None
+
+        removed_props = self.remove_overlapping_props(self._layout_data, self._layout_delta)
+        print(f'removed_props: {removed_props}')
+        self._py2js_removeLayoutProps = removed_props
+        self._py2js_removeLayoutProps = None
 
     @property
     def layout(self):
@@ -460,10 +460,10 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     def _send_relayout_msg(self, layout):
         # print('Relayout (Py->JS): {layout}'.format(layout=layout))
-        self._plotly_relayout = layout
-        self._plotly_relayout = None
+        self._py2js_relayout = layout
+        self._py2js_relayout = None
 
-    @observe('_plotly_relayoutPython')
+    @observe('_js2py_relayout')
     def handler_plotly_relayoutPython(self, change):
         relayout_data = change['new']
         if not relayout_data:
@@ -577,7 +577,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # Callbacks
     # ---------
-    @observe('_plotly_pointsCallback')
+    @observe('_js2py_pointsCallback')
     def handler_plotly_pointsCallback(self, change):
         callback_data = change['new']
         if not callback_data:
@@ -646,7 +646,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             elif event_type == 'plotly_selected':
                 trace._dispatch_on_selected(points, selector)
 
-        self._plotly_pointsCallback = None
+        self._js2py_pointsCallback = None
 
     # Static helpers
     # --------------
@@ -655,33 +655,93 @@ class BaseFigureWidget(widgets.DOMWidget):
         return isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict)
 
     @staticmethod
-    def apply_dict_delta(trace_data, delta_data):
-        if isinstance(trace_data, dict):
+    def remove_overlapping_props(input_data, delta_data, prop_path=()):
+        """
+        Remove properties in data that are also into delta. Do so recursively
+
+        Parameters
+        ----------
+        data :
+        delta :
+
+        Returns
+        -------
+        List of removed property path tuples
+        """
+        removed = []
+        if isinstance(input_data, dict):
             assert isinstance(delta_data, dict)
 
             for p, delta_val in delta_data.items():
                 if isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
-                    if p not in trace_data:
-                        trace_data[p] = {} if isinstance(delta_val, dict) else []
+                    if p in input_data:
+                        input_val = input_data[p]
+                        removed.extend(
+                            BaseFigureWidget.remove_overlapping_props(
+                                input_val,
+                                delta_val,
+                                prop_path + (p,)))
+                elif p in input_data:
+                    input_data.pop(p)
+                    removed.append(prop_path + (p,))
 
-                    trace_val = trace_data[p]
-                    BaseFigureWidget.apply_dict_delta(trace_val, delta_val)
-                else:
-                    trace_data[p] = delta_val
-        elif isinstance(trace_data, list):
-            if not isinstance(delta_data, list):
-                raise ValueError('unexpected data type: {trace_data} {delta_data}'.format(
-                    trace_data=trace_data, delta_data=delta_data))
+        elif isinstance(input_data, list):
+            assert isinstance(delta_data, list)
 
             for i, delta_val in enumerate(delta_data):
-                if i >= len(trace_data):
-                    trace_data.append(None)
+                if i >= len(input_data):
+                    break
 
-                trace_val = trace_data[i]
-                if trace_val is not None and isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
-                    BaseFigureWidget.apply_dict_delta(trace_val, delta_val)
+                input_val = input_data[i]
+                if input_val is not None and isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
+                    removed.extend(
+                        BaseFigureWidget.remove_overlapping_props(
+                            input_val,
+                            delta_val,
+                            prop_path + (i,)))
+
+        return removed
+
+    @staticmethod
+    def apply_dict_delta(input_data, delta_data):
+        """
+        Merge delta_data in trace_data
+
+        Parameters
+        ----------
+        input_data :
+        delta_data :
+
+        Returns
+        -------
+
+        """
+        if isinstance(input_data, dict):
+            assert isinstance(delta_data, dict)
+
+            for p, delta_val in delta_data.items():
+                if isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
+                    if p not in input_data:
+                        input_data[p] = {} if isinstance(delta_val, dict) else []
+
+                    input_val = input_data[p]
+                    BaseFigureWidget.apply_dict_delta(input_val, delta_val)
                 else:
-                    trace_data[i] = delta_val
+                    input_data[p] = delta_val
+        elif isinstance(input_data, list):
+            if not isinstance(delta_data, list):
+                raise ValueError('unexpected data type: {trace_data} {delta_data}'.format(
+                    trace_data=input_data, delta_data=delta_data))
+
+            for i, delta_val in enumerate(delta_data):
+                if i >= len(input_data):
+                    input_data.append(None)
+
+                input_val = input_data[i]
+                if input_val is not None and isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
+                    BaseFigureWidget.apply_dict_delta(input_val, delta_val)
+                else:
+                    input_data[i] = delta_val
 
 
 class BasePlotlyType:
