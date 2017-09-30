@@ -789,7 +789,7 @@ class InfoArrayValidator(BaseValidator):
             ]
         }
     """
-    def __init__(self, name, parent_name, items, dflt=None, freeLength=None):
+    def __init__(self, name, parent_name, items, dflt=None, free_length=None):
         super().__init__(name=name, parent_name=parent_name)
         self.items = items
 
@@ -799,7 +799,7 @@ class InfoArrayValidator(BaseValidator):
             self.item_validators.append(item_validator)
 
         self.default = dflt
-        self.free_length = freeLength
+        self.free_length = free_length
 
     @staticmethod
     def build_validator(validator_info, name, parent_name):
@@ -821,7 +821,7 @@ class InfoArrayValidator(BaseValidator):
                                                                           parent_name=self.parent_name,
                                                                           typ=type(v),
                                                                           v=v))
-        elif len(v) != len(self.item_validators):
+        elif not self.free_length and len(v) != len(self.item_validators):
             raise ValueError(('The {name} property of {parent_name} must be a list or tuple of length {N}.\n'
                               'Received a {in_cls} of length {in_N}: {v}').format(name=self.name,
                                                                                   parent_name=self.parent_name,
