@@ -24,6 +24,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         _py2js_relayout: null,
 
         _py2js_removeLayoutProps: null,
+        _py2js_removeStyleProps: null,
 
         // JS -> Python
         _js2py_restyle: null,
@@ -42,6 +43,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         this.on("change:_py2js_restyle", this.do_restyle, this);
         this.on("change:_py2js_relayout", this.do_relayout, this);
         this.on("change:_py2js_removeLayoutProps", this.do_removeLayoutProps, this);
+        this.on("change:_py2js_removeStyleProps", this.do_removeStyleProps, this);
     },
 
     _str_to_dict_path: function (rawKey) {
@@ -74,31 +76,28 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         return keyPath2
     },
 
+    normalize_trace_indexes: function (trace_indexes, num_traces) {
+        if (trace_indexes === null || trace_indexes === undefined) {
+            trace_indexes = Array.apply(null, new Array(num_traces)).map(function (_, i) {return i;});
+        }
+        if (!Array.isArray(trace_indexes)) {
+            // Make sure idx is an array
+            trace_indexes = [trace_indexes];
+        }
+        return trace_indexes
+    },
+
     do_restyle: function () {
         console.log('FigureModel: do_restyle');
         var data = this.get('_py2js_restyle');
         if (data !== null) {
             var style = data[0];
-            var trace_indexes = data[1];
-
-            if (trace_indexes === null || trace_indexes === undefined) {
-                trace_indexes = Array.apply(null, Array(self.el.data.length)).map(function (_, i) {return i;});
-            }
-            if (!Array.isArray(trace_indexes)) {
-                // Make sure idx is an array
-                trace_indexes = [trace_indexes];
-            }
-
+            var trace_indexes = this.normalize_trace_indexes(data[1]);
             this._performRestyle(style, trace_indexes)
         }
     },
 
     _performRestyle: function (style, trace_indexes){
-
-        // Make sure trace_indexes is an array
-        if (!Array.isArray(trace_indexes)) {
-            trace_indexes = [trace_indexes];
-        }
 
         for (var rawKey in style) {
             if (!style.hasOwnProperty(rawKey)) { continue }
@@ -112,25 +111,46 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
             for (var i = 0; i < trace_indexes.length; i++) {
                 var trace_ind = trace_indexes[i];
-                var trace_data = this.get('_traces_data')[trace_ind];
+                var valParent = this.get('_traces_data')[trace_ind];
 
                 for (var kp = 0; kp < keyPath.length-1; kp++) {
                     var keyPathEl = keyPath[kp];
-                    if (trace_data[keyPathEl] === undefined) {
-                        trace_data[keyPathEl] = {}
+
+                    // Extend val_parent list if needed
+                    if (Array.isArray(valParent)) {
+                        if (typeof keyPathEl === 'number') {
+                            while (valParent.length <= keyPathEl) {
+                                valParent.push(null)
+                            }
+                        }
+                    } else { // object
+                        // Initialize child if needed
+                        if (valParent[keyPathEl] === undefined) {
+                            if (typeof keyPath[kp + 1] === 'number') {
+                                valParent[keyPathEl] = []
+                            } else {
+                                valParent[keyPathEl] = {}
+                            }
+                        }
                     }
-                    trace_data = trace_data[keyPathEl];
+                    valParent = valParent[keyPathEl];
                 }
 
                 var lastKey = keyPath[keyPath.length-1];
                 var trace_v = v[i % v.length];
 
                 if (trace_v === null || trace_v === undefined){
-                    if(lastKey in trace_data) {
-                        delete trace_data[lastKey];
+                    if(valParent.hasOwnProperty(lastKey)) {
+                        delete valParent[lastKey];
                     }
                 } else {
-                    trace_data[lastKey] = trace_v;
+                    if (Array.isArray(valParent) && typeof lastKey === 'number') {
+                        while (valParent.length <= lastKey) {
+                            // Make sure array is long enough to assign into
+                            valParent.push(null)
+                        }
+                    }
+                    valParent[lastKey] = trace_v;
                 }
             }
         }
@@ -159,11 +179,22 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
             for (var kp = 0; kp < keyPath.length-1; kp++) {
                 var keyPathEl = keyPath[kp];
-                if (valParent[keyPathEl] === undefined) {
-                    if (typeof keyPath[kp+1] === 'number') {
-                        valParent[keyPathEl] = []
-                    } else {
-                        valParent[keyPathEl] = {}
+
+                // Extend val_parent list if needed
+                if (Array.isArray(valParent)) {
+                    if(typeof keyPathEl === 'number') {
+                        while (valParent.length <= keyPathEl) {
+                            valParent.push(null)
+                        }
+                    }
+                } else {
+                    // Initialize child if needed
+                    if (valParent[keyPathEl] === undefined) {
+                        if (typeof keyPath[kp + 1] === 'number') {
+                            valParent[keyPathEl] = []
+                        } else {
+                            valParent[keyPathEl] = {}
+                        }
                     }
                 }
                 valParent = valParent[keyPathEl];
@@ -188,7 +219,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
     },
 
     do_removeLayoutProps: function () {
-        console.log('FigureModel: do_removeLayoutProps');
+        console.log('FigureModel:do_removeLayoutProps');
         var data = this.get('_py2js_removeLayoutProps');
         if (data !== null) {
             console.log(this.get('_layout_data'));
@@ -215,6 +246,41 @@ var FigureModel = widgets.DOMWidgetModel.extend({
             }
             console.log(this.get('_layout_data'));
         }
+    },
+
+    do_removeStyleProps: function () {
+        console.log('FigureModel:do_removeStyleProps');
+        var data = this.get('_py2js_removeStyleProps');
+        if (data !== null) {
+            var keyPaths = data[0];
+            var trace_indexes = this.normalize_trace_indexes(data[1]);
+
+            for(var k=0; k < keyPaths.length; k++) {
+
+                var keyPath = keyPaths[k];
+
+                for (var i = 0; i < trace_indexes.length; i++) {
+                    var trace_ind = trace_indexes[i];
+                    var valParent = this.get('_traces_data')[trace_ind];
+
+                    for (var kp = 0; kp < keyPath.length - 1; kp++) {
+                        var keyPathEl = keyPath[kp];
+                        if (valParent[keyPathEl] === undefined) {
+                            valParent = null;
+                            break
+                        }
+                        valParent = valParent[keyPathEl];
+                    }
+                    if (valParent !== null) {
+                        var lastKey = keyPath[keyPath.length - 1];
+                        if (valParent.hasOwnProperty(lastKey)) {
+                            delete valParent[lastKey];
+                            console.log('Removed ' + keyPath)
+                        }
+                    }
+                }
+            }
+        }
     }
 });
 
@@ -239,9 +305,6 @@ var FigureView = widgets.DOMWidgetView.extend({
         var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
         this.model.set('_js2py_layoutDelta', relayoutDelta);
 
-        // var layoutData = this.clone_fullLayout_data(this.el.layout);
-        // this.model.set('_layout_data', layoutData);
-
         // Update traces
         // Loop over new traces
         var traceDeltas = new Array(initial_traces.length);
@@ -251,6 +314,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             traceDeltas[i] = this.create_delta_object(traceData, fullTraceData);
         }
 
+        console.log(traceDeltas);
         this.model.set('_js2py_styleDelta', traceDeltas);
 
         // Python -> JS event properties
@@ -525,13 +589,15 @@ var FigureView = widgets.DOMWidgetView.extend({
 
             // Loop over new traces
             var traceDeltas = new Array(data.length);
+            var tracesData = this.model.get('_traces_data');
             for(var i=0; i < data.length; i++) {
                 var fullTraceData = this.el._fullData[i + prev_num_traces];
-                var traceData = data[i];
+                var traceData = tracesData[i + prev_num_traces];
                 traceDeltas[i] = this.create_delta_object(traceData, fullTraceData);
             }
 
             this.model.set('_js2py_styleDelta', traceDeltas);
+
 
             // Update layout
             var layoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
@@ -588,22 +654,22 @@ var FigureView = widgets.DOMWidgetView.extend({
                 idx = [idx];
             }
 
-            var fullDataPres = Array(idx.length);
-            for (var i = 0; i < idx.length; i++) {
-                fullDataPres[i] = this.clone_fullData_metadata(this.el._fullData[idx[i]]);
-            }
-
             style['_doNotReportToPy'] = true;
             Plotly.restyle(this.el, style, idx);
 
-            var traceDeltas = Array(idx.length);
-            for (i = 0; i < idx.length; i++) {
-                traceDeltas[i] = this.create_delta_object(fullDataPres[i], this.el._fullData[idx[i]]);
+            // Send back style delta
+            var traceDeltas = new Array(idx.length);
+            var trace_data = this.model.get('_traces_data');
+            for (var i = 0; i < idx.length; i++) {
+                traceDeltas[i] = this.create_delta_object(trace_data[idx[i]], this.el._fullData[idx[i]]);
+                console.log(traceDeltas[i]);
+                console.log(trace_data[idx[i]]);
             }
+
 
             this.model.set('_js2py_styleDelta', traceDeltas);
 
-            // Update layout
+            // Send back layout delta
             var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
             this.model.set('_js2py_layoutDelta', relayoutDelta);
 
@@ -671,11 +737,22 @@ var FigureView = widgets.DOMWidgetView.extend({
                 if (!props_equal || p === 'uid') {  // Let uids through
                     // property has non-null value in fullData that doesn't match the value in
                     var full_val = fullData[p];
-                    if (data.hasOwnProperty(p) && typeof full_val === 'object' && !Array.isArray(full_val)) {
-                        var full_obj = this.create_delta_object(data[p], full_val);
-                        if (Object.keys(full_obj).length > 0) {
-                            // new object is not empty
-                            res[p] = full_obj;
+                    if (data.hasOwnProperty(p) && typeof full_val === 'object') {
+                        if(Array.isArray(full_val)) {
+                            res[p] = new Array(full_val.length);
+                            for (var i = 0; i < full_val.length; i++) {
+                                if (!Array.isArray(data[p]) || data[p].length <= i) {
+                                    res[p][i] = full_val[i]
+                                } else {
+                                    res[p][i] = this.create_delta_object(data[p][i], full_val[i]);
+                                }
+                            }
+                        } else { // object
+                            var full_obj = this.create_delta_object(data[p], full_val);
+                            if (Object.keys(full_obj).length > 0) {
+                                // new object is not empty
+                                res[p] = full_obj;
+                            }
                         }
                     } else if (typeof full_val === 'object' && !Array.isArray(full_val)) {
                         res[p] = this.create_delta_object({}, full_val);

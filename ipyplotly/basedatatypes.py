@@ -57,6 +57,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     _py2js_moveTraces = List(allow_none=True).tag(sync=True)
 
     _py2js_removeLayoutProps = List(allow_none=True).tag(sync=True)
+    _py2js_removeStyleProps = List(allow_none=True).tag(sync=True)
 
     # JS -> Python message properties
     _js2py_styleDelta = List(allow_none=True).tag(sync=True)
@@ -118,13 +119,20 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         for delta in deltas:
             uid = delta['uid']
-            uid_traces = [trace for trace in self.traces if trace._data.get('uid', None) == uid]
-            if len(uid_traces) != 1:
-                raise ValueError('uid of restyle message did not match exactly one trace: \n'
-                                 'uid: {uid}'.format(uid=uid))
+            trace_uids = [trace.uid for trace in self.traces]
+            trace_index = trace_uids.index(uid)
+            uid_trace = self.traces[trace_index]
+            delta_transform = BaseFigureWidget.transform_data(uid_trace._delta, delta)
 
-            uid_trace = uid_traces[0]
-            BaseFigureWidget.transform_data(uid_trace._delta, delta)
+            removed_props = self.remove_overlapping_props(uid_trace._data, uid_trace._delta)
+
+            if removed_props:
+                # print(f'removed_props: {removed_props}')
+                self._py2js_removeStyleProps = removed_props
+                self._py2js_removeStyleProps = None
+
+            # print(delta_transform)
+            self._dispatch_change_callbacks_restyle(delta_transform, [trace_index])
 
     @observe('_js2py_restyle')
     def handler_plotly_restylePython(self, change):
@@ -151,7 +159,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     # Traces
     # ------
     @property
-    def traces(self) -> typ.Tuple['BaseTraceHierarchyType']:
+    def traces(self) -> typ.Tuple['BaseTraceType']:
         return self._traces
 
     @traces.setter
@@ -251,11 +259,21 @@ class BaseFigureWidget(widgets.DOMWidget):
                 for i, trace_ind in enumerate(trace_indexes):
                     if trace_ind >= len(self._traces_data):
                         raise ValueError('Trace index {trace_ind} out of range'.format(trace_ind=trace_ind))
-                    trace_data = self._traces_data[trace_ind]
-                    for key_path_el in key_path[:-1]:
-                        if isinstance(key_path_el, str) and key_path_el not in trace_data:
-                            trace_data[key_path_el] = {}
-                        trace_data = trace_data[key_path_el]
+                    val_parent = self._traces_data[trace_ind]
+                    for kp, key_path_el in enumerate(key_path[:-1]):
+
+                        # Extend val_parent list if needed
+                        if isinstance(val_parent, list) and isinstance(key_path_el, int):
+                            while len(val_parent) <= key_path_el:
+                                val_parent.append(None)
+
+                        elif isinstance(val_parent, dict) and key_path_el not in val_parent:
+                            if isinstance(key_path[kp + 1], int):
+                                val_parent[key_path_el] = []
+                            else:
+                                val_parent[key_path_el] = {}
+
+                        val_parent = val_parent[key_path_el]
 
                     last_key = key_path[-1]
 
@@ -264,19 +282,17 @@ class BaseFigureWidget(widgets.DOMWidget):
                     restyle_msg_vs.append(trace_v)
 
                     if trace_v is None:
-                        if last_key in trace_data:
-                            trace_data.pop(last_key)
+                        if isinstance(val_parent, dict) and last_key in val_parent:
+                            val_parent.pop(last_key)
                             any_vals_changed = True
-                    else:
-                        if last_key not in trace_data or trace_data[last_key] != trace_v:
-                            trace_data[last_key] = trace_v
+                    elif isinstance(val_parent, dict):
+                        if last_key not in val_parent or val_parent[last_key] != trace_v:
+                            val_parent[last_key] = trace_v
                             any_vals_changed = True
 
                 if any_vals_changed:
                     # At lease one of the values for one of the traces has changed. Update them all
                     restyle_data[raw_key] = restyle_msg_vs
-
-        # TODO: update restyle_delta to remove properties that were just set
 
         return restyle_data
 
@@ -497,10 +513,17 @@ class BaseFigureWidget(widgets.DOMWidget):
             val_parent = self._layout_data
             for kp, key_path_el in enumerate(key_path[:-1]):
                 if key_path_el not in val_parent:
-                    if isinstance(key_path[kp+1], int):
-                        val_parent[key_path_el] = []
-                    else:
-                        val_parent[key_path_el] = {}
+
+                    # Extend val_parent list if needed
+                    if isinstance(val_parent, list) and isinstance(key_path_el, int):
+                        while len(val_parent) <= key_path_el:
+                            val_parent.append(None)
+
+                    elif isinstance(val_parent, dict) and key_path_el not in val_parent:
+                        if isinstance(key_path[kp+1], int):
+                            val_parent[key_path_el] = []
+                        else:
+                            val_parent[key_path_el] = {}
 
                 val_parent = val_parent[key_path_el]
 
@@ -677,7 +700,9 @@ class BaseFigureWidget(widgets.DOMWidget):
     @staticmethod
     def remove_overlapping_props(input_data, delta_data, prop_path=()):
         """
-        Remove properties in data that are also into delta. Do so recursively
+        Remove properties in data that are also into delta. Do so recursively.
+
+        Except, never remove uid from input_data
 
         Parameters
         ----------
@@ -701,7 +726,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                                 input_val,
                                 delta_val,
                                 prop_path + (p,)))
-                elif p in input_data:
+                elif p in input_data and p != 'uid':
                     input_data.pop(p)
                     removed.append(prop_path + (p,))
 
@@ -778,11 +803,11 @@ class BaseFigureWidget(widgets.DOMWidget):
                         BaseFigureWidget.transform_data(
                             input_val,
                             from_val,
-                            relayout_path=relayout_path + (str(i),)))
+                            relayout_path=relayout_path + (i,)))
                 else:
                     if to_data[i] != from_val:
                         to_data[i] = from_val
-                        relayout_terms[relayout_path + (str(i),)] = from_val
+                        relayout_terms[relayout_path + (i,)] = from_val
 
         return relayout_terms
 
@@ -819,8 +844,21 @@ class BasePlotlyType:
     def _init_child_data(self, child):
         self.parent._init_child_data(self)
         self_data = self.parent._get_child_data(self)
-        if child.prop_name not in self_data:
-            self_data[child.prop_name] = {}
+
+        child_or_children = self._compound_props[child.prop_name]
+        if child is child_or_children:
+            if child.prop_name not in self_data:
+                self_data[child.prop_name] = {}
+        elif isinstance(child_or_children, (list, tuple)):
+            child_ind = child_or_children.index(child)
+            if child.prop_name not in self_data:
+                # Initialize list
+                self_data[child.prop_name] = []
+
+            # Make sure list is long enough for child
+            child_list = self_data[child.prop_name]
+            while(len(child_list) <= child_ind):
+                child_list.append({})
 
     def _get_child_data(self, child):
         self_data = self.parent._get_child_data(self)
@@ -833,7 +871,9 @@ class BasePlotlyType:
             elif isinstance(child_or_children, (list, tuple)):
                 child_ind = child_or_children.index(child)
                 children_data = self_data.get(child.prop_name, None)
-                return children_data[child_ind] if children_data is not None else None
+                return children_data[child_ind] \
+                    if children_data is not None and len(children_data) > child_ind \
+                    else None
             else:
                 ValueError('Unexpected child: %s' % child_or_children)
 
@@ -1132,6 +1172,16 @@ class BaseTraceType(BaseTraceHierarchyType):
         self._unhover_callbacks = []
         self._click_callbacks = []
         self._select_callbacks = []
+
+    # uid
+    # ---
+    @property
+    def uid(self) -> str:
+        raise NotImplementedError
+
+    @uid.setter
+    def uid(self, val):
+        raise NotImplementedError
 
     # Hover
     # -----
