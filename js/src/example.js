@@ -140,8 +140,9 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         console.log('FigureModel: do_relayout');
         var data = this.get('_py2js_relayout');
         if (data !== null) {
-            // TODO:
+            console.log(data);
             this._performRelayout(data);
+            console.log(this.get('_layout_data'))
         }
     },
 
@@ -159,7 +160,11 @@ var FigureModel = widgets.DOMWidgetModel.extend({
             for (var kp = 0; kp < keyPath.length-1; kp++) {
                 var keyPathEl = keyPath[kp];
                 if (valParent[keyPathEl] === undefined) {
-                    valParent[keyPathEl] = {}
+                    if (typeof keyPath[kp+1] === 'number') {
+                        valParent[keyPathEl] = []
+                    } else {
+                        valParent[keyPathEl] = {}
+                    }
                 }
                 valParent = valParent[keyPathEl];
             }
@@ -171,6 +176,12 @@ var FigureModel = widgets.DOMWidgetModel.extend({
                     delete valParent[lastKey];
                 }
             } else {
+                if (Array.isArray(valParent) && typeof lastKey === 'number') {
+                    while (valParent.length <= lastKey) {
+                        // Make sure array is long enough to assign into
+                        valParent.push(null)
+                    }
+                }
                 valParent[lastKey] = v;
             }
         }
@@ -180,7 +191,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         console.log('FigureModel: do_removeLayoutProps');
         var data = this.get('_py2js_removeLayoutProps');
         if (data !== null) {
-            // TODO:
+            console.log(this.get('_layout_data'));
             for(var i=0; i < data.length; i++) {
 
                 var keyPath = data[i];
@@ -196,7 +207,10 @@ var FigureModel = widgets.DOMWidgetModel.extend({
                 }
                 if (valParent !== null) {
                     var lastKey = keyPath[keyPath.length - 1];
-                    delete valParent[lastKey]
+                    if (valParent.hasOwnProperty(lastKey)) {
+                        delete valParent[lastKey];
+                        console.log('Removed ' + keyPath)
+                    }
                 }
             }
             console.log(this.get('_layout_data'));
@@ -520,8 +534,8 @@ var FigureView = widgets.DOMWidgetView.extend({
             this.model.set('_js2py_styleDelta', traceDeltas);
 
             // Update layout
-            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
-            this.model.set('_js2py_layoutDelta', relayoutDelta);
+            var layoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
+            this.model.set('_js2py_layoutDelta', layoutDelta);
 
             this.touch();
         }
@@ -607,6 +621,7 @@ var FigureView = widgets.DOMWidgetView.extend({
 
             var layoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
             console.log(layoutDelta);
+            console.log(this.model.get('_layout_data'));
             this.model.set('_js2py_layoutDelta', layoutDelta);
 
             this.touch();

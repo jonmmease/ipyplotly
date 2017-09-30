@@ -111,8 +111,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     @observe('_js2py_styleDelta')
     def handler_plotly_restyleDelta(self, change):
         deltas = change['new']
-        # print('restyleDelta msg')
-        # pprint(deltas)
+        self._js2py_styleDelta = None
 
         if not deltas:
             return
@@ -125,14 +124,13 @@ class BaseFigureWidget(widgets.DOMWidget):
                                  'uid: {uid}'.format(uid=uid))
 
             uid_trace = uid_traces[0]
-            BaseFigureWidget.apply_dict_delta(uid_trace._delta, delta)
-
-        # Remove processed trace delta data
-        self._js2py_styleDelta = None
+            BaseFigureWidget.transform_data(uid_trace._delta, delta)
 
     @observe('_js2py_restyle')
     def handler_plotly_restylePython(self, change):
         restyle_msg = change['new']
+        self._js2py_restyle = None
+
         if not restyle_msg:
             return
 
@@ -411,20 +409,23 @@ class BaseFigureWidget(widgets.DOMWidget):
     @observe('_js2py_layoutDelta')
     def handler_plotly_layoutDelta(self, change):
         delta = change['new']
+        self._js2py_layoutDelta = None
 
         if not delta:
             return
 
         # print('layoutDelta: {deltas}'.format(deltas=delta))
-        self._layout_delta = delta
-        # self.apply_dict_delta(self.layout._delta, delta)
-        # Remove processed trace delta data
-        self._js2py_layoutDelta = None
+        delta_transform = self.transform_data(self._layout_delta, delta)
+        # print(f'delta_transform: {delta_transform}')
 
+        # print(f'_layout_data: {self._layout_data}')
         removed_props = self.remove_overlapping_props(self._layout_data, self._layout_delta)
-        print(f'removed_props: {removed_props}')
-        self._py2js_removeLayoutProps = removed_props
-        self._py2js_removeLayoutProps = None
+        if removed_props:
+            # print(f'removed_props: {removed_props}')
+            self._py2js_removeLayoutProps = removed_props
+            self._py2js_removeLayoutProps = None
+
+        self._dispatch_change_callbacks_relayout(delta_transform)
 
     @property
     def layout(self):
@@ -466,6 +467,8 @@ class BaseFigureWidget(widgets.DOMWidget):
     @observe('_js2py_relayout')
     def handler_plotly_relayoutPython(self, change):
         relayout_data = change['new']
+        self._js2py_relayout = None
+
         if not relayout_data:
             return
 
@@ -475,8 +478,9 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         self.relayout(relayout_data)
 
+
     def relayout(self, relayout_data):
-        print(f'Relayout: {relayout_data}')
+        # print(f'Relayout: {relayout_data}')
         relayout_msg = self._perform_relayout(relayout_data)
         if relayout_msg:
             self._dispatch_change_callbacks_relayout(relayout_msg)
@@ -491,22 +495,34 @@ class BaseFigureWidget(widgets.DOMWidget):
             key_path = self._str_to_dict_path(raw_key)
 
             val_parent = self._layout_data
-            for key_path_el in key_path[:-1]:
-                if isinstance(key_path_el, str) and key_path_el not in val_parent:
-                    val_parent[key_path_el] = {}
+            for kp, key_path_el in enumerate(key_path[:-1]):
+                if key_path_el not in val_parent:
+                    if isinstance(key_path[kp+1], int):
+                        val_parent[key_path_el] = []
+                    else:
+                        val_parent[key_path_el] = {}
+
                 val_parent = val_parent[key_path_el]
 
             last_key = key_path[-1]
             # print(f'{val_parent}, {key_path}, {last_key}, {v}')
 
-            if v is None and last_key in val_parent:
-                val_parent.pop(last_key)
-                relayout_msg[raw_key] = None
-            elif v is not None and (last_key not in val_parent or val_parent[last_key] != v):
-                val_parent[last_key] = v
-                relayout_msg[raw_key] = v
+            if v is None:
+                if isinstance(val_parent, dict) and last_key in val_parent:
+                    val_parent.pop(last_key)
+                    relayout_msg[raw_key] = None
+            else:
+                if isinstance(val_parent, list):
+                    if isinstance(last_key, int):
+                        while(len(val_parent) <= last_key):
+                            val_parent.append(None)
+                        val_parent[last_key] = v
+                        relayout_msg[raw_key] = v
+                elif isinstance(val_parent, dict):
+                    if last_key not in val_parent or val_parent[last_key] != v:
+                        val_parent[last_key] = v
+                        relayout_msg[raw_key] = v
 
-        # TODO: Update layout_delta: Remove values that were set explicitly
         return relayout_msg
 
     def _dispatch_change_callbacks_relayout(self, relayout_msg):
@@ -553,33 +569,39 @@ class BaseFigureWidget(widgets.DOMWidget):
     @staticmethod
     def _str_to_dict_path(raw_key):
 
-        # Split string on periods. e.g. 'foo.bar[0]' -> ['foo', 'bar[0]']
-        key_path = raw_key.split('.')
+        if isinstance(raw_key, tuple):
+            # Nothing to do
+            return raw_key
+        else:
+            # Split string on periods. e.g. 'foo.bar[0]' -> ['foo', 'bar[0]']
+            key_path = raw_key.split('.')
 
-        # Split out bracket indexes. e.g. ['foo', 'bar[0]'] -> ['foo', 'bar', '0']
-        bracket_re = re.compile('(.*)\[(\d+)\]')
-        key_path2 = []
-        for key in key_path:
-            match = bracket_re.fullmatch(key)
-            if match:
-                key_path2.extend(match.groups())
-            else:
-                key_path2.append(key)
+            # Split out bracket indexes. e.g. ['foo', 'bar[0]'] -> ['foo', 'bar', '0']
+            bracket_re = re.compile('(.*)\[(\d+)\]')
+            key_path2 = []
+            for key in key_path:
+                match = bracket_re.fullmatch(key)
+                if match:
+                    key_path2.extend(match.groups())
+                else:
+                    key_path2.append(key)
 
-        # Convert elements to ints if possible. e.g. e.g. ['foo', 'bar', '0'] -> ['foo', 'bar', 0]
-        for i in range(len(key_path2)):
-            try:
-                key_path2[i] = int(key_path2[i])
-            except ValueError as _:
-                pass
+            # Convert elements to ints if possible. e.g. e.g. ['foo', 'bar', '0'] -> ['foo', 'bar', 0]
+            for i in range(len(key_path2)):
+                try:
+                    key_path2[i] = int(key_path2[i])
+                except ValueError as _:
+                    pass
 
-        return tuple(key_path2)
+            return tuple(key_path2)
 
     # Callbacks
     # ---------
     @observe('_js2py_pointsCallback')
     def handler_plotly_pointsCallback(self, change):
         callback_data = change['new']
+        self._js2py_pointsCallback = None
+
         if not callback_data:
             return
 
@@ -646,8 +668,6 @@ class BaseFigureWidget(widgets.DOMWidget):
             elif event_type == 'plotly_selected':
                 trace._dispatch_on_selected(points, selector)
 
-        self._js2py_pointsCallback = None
-
     # Static helpers
     # --------------
     @staticmethod
@@ -703,46 +723,68 @@ class BaseFigureWidget(widgets.DOMWidget):
         return removed
 
     @staticmethod
-    def apply_dict_delta(input_data, delta_data):
+    def transform_data(to_data, from_data, relayout_path=()):
         """
-        Merge delta_data in trace_data
+        Transform to_data into from_data and return relayout style description of transformation
 
         Parameters
         ----------
-        input_data :
-        delta_data :
+        to_data :
+        from_data :
 
         Returns
         -------
 
         """
-        if isinstance(input_data, dict):
-            assert isinstance(delta_data, dict)
+        relayout_terms = {}
+        if isinstance(to_data, dict):
+            if not isinstance(from_data, dict):
+                raise ValueError('Mismatched data types: to_data: {to_dict} {from_data}'.format(
+                    to_dict=to_data, from_data=from_data))
 
-            for p, delta_val in delta_data.items():
-                if isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
-                    if p not in input_data:
-                        input_data[p] = {} if isinstance(delta_val, dict) else []
+            # Handle addition / modification of terms
+            for from_prop, from_val in from_data.items():
+                if isinstance(from_val, dict) or BaseFigureWidget._is_object_list(from_val):
+                    if from_prop not in to_data:
+                        to_data[from_prop] = {} if isinstance(from_val, dict) else []
 
-                    input_val = input_data[p]
-                    BaseFigureWidget.apply_dict_delta(input_val, delta_val)
+                    input_val = to_data[from_prop]
+                    relayout_terms.update(
+                        BaseFigureWidget.transform_data(
+                            input_val,
+                            from_val,
+                            relayout_path=relayout_path + (from_prop,)))
                 else:
-                    input_data[p] = delta_val
-        elif isinstance(input_data, list):
-            if not isinstance(delta_data, list):
-                raise ValueError('unexpected data type: {trace_data} {delta_data}'.format(
-                    trace_data=input_data, delta_data=delta_data))
+                    if from_prop not in to_data or to_data[from_prop] != from_val:
+                        to_data[from_prop] = from_val
+                        relayout_terms[relayout_path + (from_prop,)] = from_val
 
-            for i, delta_val in enumerate(delta_data):
-                if i >= len(input_data):
-                    input_data.append(None)
+            # Handle removal of terms
+            for remove_prop in set(to_data.keys()).difference(set(from_data.keys())):
+                to_data.pop(remove_prop)
 
-                input_val = input_data[i]
-                if input_val is not None and isinstance(delta_val, dict) or BaseFigureWidget._is_object_list(delta_val):
-                    BaseFigureWidget.apply_dict_delta(input_val, delta_val)
+        elif isinstance(to_data, list):
+            if not isinstance(from_data, list):
+                raise ValueError('Mismatched data types: to_data: {to_data} {from_data}'.format(
+                    to_data=to_data, from_data=from_data))
+
+            for i, from_val in enumerate(from_data):
+                if i >= len(to_data):
+                    to_data.append(None)
+
+                input_val = to_data[i]
+                if input_val is not None and isinstance(from_val, dict) or BaseFigureWidget._is_object_list(from_val):
+                    relayout_terms.update(
+                        BaseFigureWidget.transform_data(
+                            input_val,
+                            from_val,
+                            relayout_path=relayout_path + (str(i),)))
                 else:
-                    input_data[i] = delta_val
+                    if to_data[i] != from_val:
+                        to_data[i] = from_val
+                        relayout_terms[relayout_path + (str(i),)] = from_val
 
+        return relayout_terms
 
 class BasePlotlyType:
     def __init__(self, prop_name):
@@ -963,7 +1005,7 @@ class BasePlotlyType:
     # Callbacks
     # ---------
     def _dispatch_change_callbacks(self, changed_paths):
-        # print(f'change callback: {self} - {self.prop_name} - {changed_paths}')
+        # print(f'Change callback: {self.prop_name} - {changed_paths}')
         changed_paths = set(changed_paths)
         # pprint(changed_paths)
         for callback_paths, callback in self._change_callbacks.items():
