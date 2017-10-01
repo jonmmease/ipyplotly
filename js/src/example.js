@@ -1,5 +1,5 @@
 var widgets = require('@jupyter-widgets/base');
-var _ = require('underscore');
+var _ = require('lodash');
 var Plotly = require('plotly.js');
 
 
@@ -304,14 +304,19 @@ var FigureView = widgets.DOMWidgetView.extend({
         Plotly.plot(this.el, initial_traces, initial_layout);
 
         // Update layout
-        var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
+        var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
         this.model.set('_js2py_layoutDelta', relayoutDelta);
+
+        // TODO: Write function to merge data with fullData (Use data if available, otherwise fullData)
+        //     This way colorscales stay named. Compute deltas against this object.
+        //     - this.getDataWithDefaults() and this.getLayoutWithDefaults()
 
         // Update traces
         // Loop over new traces
         var traceDeltas = new Array(initial_traces.length);
+        var fullData = this.getFullData();
         for(var i=0; i < initial_traces.length; i++) {
-            var fullTraceData = this.el._fullData[i];
+            var fullTraceData = fullData[i];
             var traceData = initial_traces[i];
             traceDeltas[i] = this.create_delta_object(traceData, fullTraceData);
         }
@@ -344,6 +349,17 @@ var FigureView = widgets.DOMWidgetView.extend({
 
         // sync any/all changes back to model
         this.touch();
+    },
+
+    getFullData: function () {
+        // Merge so that we use .data properties if available.
+        // e.g. colorscales can be stored by name in this.el.data (Viridis) but by array in el._fullData. We want
+        // the string in this case
+        return _.merge(this.el._fullData, this.el.data);
+    },
+
+    getFullLayout: function () {
+        return _.merge(this.el._fullLayout, this.el.layout);
     },
 
     buildPointsObject: function (data) {
@@ -584,16 +600,16 @@ var FigureView = widgets.DOMWidgetView.extend({
         console.log('do_addTraces');
 
         if (data !== null) {
-            var prev_num_traces = this.el._fullData.length;
+            var prev_num_traces = this.el.data.length;
             // console.log(data);
             Plotly.addTraces(this.el, data);
-            // console.log(this.el._fullData);
 
             // Loop over new traces
             var traceDeltas = new Array(data.length);
             var tracesData = this.model.get('_traces_data');
+            var fullData = this.getFullData();
             for(var i=0; i < data.length; i++) {
-                var fullTraceData = this.el._fullData[i + prev_num_traces];
+                var fullTraceData = fullData[i + prev_num_traces];
                 var traceData = tracesData[i + prev_num_traces];
                 traceDeltas[i] = this.create_delta_object(traceData, fullTraceData);
             }
@@ -602,7 +618,7 @@ var FigureView = widgets.DOMWidgetView.extend({
 
 
             // Update layout
-            var layoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
+            var layoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
             this.model.set('_js2py_layoutDelta', layoutDelta);
 
             this.touch();
@@ -617,7 +633,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             Plotly.deleteTraces(this.el, delete_inds);
 
             // Update layout
-            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
+            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
             this.model.set('_js2py_layoutDelta', relayoutDelta);
             this.touch();
         }
@@ -662,8 +678,9 @@ var FigureView = widgets.DOMWidgetView.extend({
             // Send back style delta
             var traceDeltas = new Array(idx.length);
             var trace_data = this.model.get('_traces_data');
+            var fullData = this.getFullData();
             for (var i = 0; i < idx.length; i++) {
-                traceDeltas[i] = this.create_delta_object(trace_data[idx[i]], this.el._fullData[idx[i]]);
+                traceDeltas[i] = this.create_delta_object(trace_data[idx[i]], fullData[idx[i]]);
                 console.log(traceDeltas[i]);
                 console.log(trace_data[idx[i]]);
             }
@@ -672,7 +689,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             this.model.set('_js2py_styleDelta', traceDeltas);
 
             // Send back layout delta
-            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
+            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
             this.model.set('_js2py_layoutDelta', relayoutDelta);
 
             this.touch();
@@ -690,7 +707,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             data['_doNotReportToPy'] = true;
             Plotly.relayout(this.el, data);
 
-            var layoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.el._fullLayout);
+            var layoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
             console.log(layoutDelta);
             console.log(this.model.get('_layout_data'));
             this.model.set('_js2py_layoutDelta', layoutDelta);

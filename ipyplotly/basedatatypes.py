@@ -349,8 +349,8 @@ class BaseFigureWidget(widgets.DOMWidget):
             trace_indexes = [trace_indexes]
 
         restype_msg = (style, trace_indexes)
-        print('Restyle (Py->JS)')
-        pprint(restype_msg)
+        # print('Restyle (Py->JS)')
+        # pprint(restype_msg)
 
         self._py2js_restyle = restype_msg
         self._py2js_restyle = None
