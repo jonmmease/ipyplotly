@@ -127,8 +127,8 @@ class BaseFigureWidget(widgets.DOMWidget):
             removed_props = self.remove_overlapping_props(uid_trace._data, uid_trace._delta)
 
             if removed_props:
-                # print(f'removed_props: {removed_props}')
-                self._py2js_removeStyleProps = removed_props
+                print(f'Removed_props: {removed_props}')
+                self._py2js_removeStyleProps = [removed_props, trace_index]
                 self._py2js_removeStyleProps = None
 
             # print(delta_transform)
@@ -349,7 +349,9 @@ class BaseFigureWidget(widgets.DOMWidget):
             trace_indexes = [trace_indexes]
 
         restype_msg = (style, trace_indexes)
-        # print('Restyle (Py->JS): {msg}\n type: {typ}'.format(msg=restype_msg, typ=type(restype_msg)))
+        print('Restyle (Py->JS)')
+        pprint(restype_msg)
+
         self._py2js_restyle = restype_msg
         self._py2js_restyle = None
 
@@ -691,6 +693,13 @@ class BaseFigureWidget(widgets.DOMWidget):
             elif event_type == 'plotly_selected':
                 trace._dispatch_on_selected(points, selector)
 
+    def to_dict(self):
+        data = deepcopy(self._traces_data)
+        # BaseFigureWidget.transform_data(data, deepcopy(self._traces_deltas), should_remove=False)
+        layout = deepcopy(self._layout_data)
+        # BaseFigureWidget.transform_data(layout, deepcopy(self._layout_delta), should_remove=False)
+        return {'data': data, 'layout': layout}
+
     # Static helpers
     # --------------
     @staticmethod
@@ -748,7 +757,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         return removed
 
     @staticmethod
-    def transform_data(to_data, from_data, relayout_path=()):
+    def transform_data(to_data, from_data, should_remove=True, relayout_path=()):
         """
         Transform to_data into from_data and return relayout style description of transformation
 
@@ -778,6 +787,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                         BaseFigureWidget.transform_data(
                             input_val,
                             from_val,
+                            should_remove=should_remove,
                             relayout_path=relayout_path + (from_prop,)))
                 else:
                     if from_prop not in to_data or to_data[from_prop] != from_val:
@@ -785,8 +795,9 @@ class BaseFigureWidget(widgets.DOMWidget):
                         relayout_terms[relayout_path + (from_prop,)] = from_val
 
             # Handle removal of terms
-            for remove_prop in set(to_data.keys()).difference(set(from_data.keys())):
-                to_data.pop(remove_prop)
+            if should_remove:
+                for remove_prop in set(to_data.keys()).difference(set(from_data.keys())):
+                    to_data.pop(remove_prop)
 
         elif isinstance(to_data, list):
             if not isinstance(from_data, list):
@@ -803,6 +814,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                         BaseFigureWidget.transform_data(
                             input_val,
                             from_val,
+                            should_remove=should_remove,
                             relayout_path=relayout_path + (i,)))
                 else:
                     if to_data[i] != from_val:

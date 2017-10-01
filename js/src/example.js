@@ -78,7 +78,8 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
     normalize_trace_indexes: function (trace_indexes, num_traces) {
         if (trace_indexes === null || trace_indexes === undefined) {
-            trace_indexes = Array.apply(null, new Array(num_traces)).map(function (_, i) {return i;});
+            var numTraces = this.get('_traces_data').length;
+            trace_indexes = Array.apply(null, new Array(numTraces)).map(function (_, i) {return i;});
         }
         if (!Array.isArray(trace_indexes)) {
             // Make sure idx is an array
@@ -252,6 +253,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         console.log('FigureModel:do_removeStyleProps');
         var data = this.get('_py2js_removeStyleProps');
         if (data !== null) {
+            console.log(data);
             var keyPaths = data[0];
             var trace_indexes = this.normalize_trace_indexes(data[1]);
 
@@ -674,6 +676,9 @@ var FigureView = widgets.DOMWidgetView.extend({
             this.model.set('_js2py_layoutDelta', relayoutDelta);
 
             this.touch();
+
+            console.log('New el.data');
+            console.log(this.el.data);
         }
     },
 
