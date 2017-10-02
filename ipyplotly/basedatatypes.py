@@ -11,6 +11,14 @@ from traitlets import List, Unicode, Dict, default, observe
 from ipyplotly.callbacks import Points, BoxSelector, LassoSelector, InputState
 from ipyplotly.validators.layout import XaxisValidator, YaxisValidator, GeoValidator, TernaryValidator, SceneValidator
 
+from selenium import webdriver
+from plotly.offline import plot as plotlypy_plot
+from PIL import Image, ImageOps
+import io
+import tempfile
+import os
+import pathlib
+
 # TODO:
 # Callbacks
 # ---------
@@ -693,12 +701,52 @@ class BaseFigureWidget(widgets.DOMWidget):
             elif event_type == 'plotly_selected':
                 trace._dispatch_on_selected(points, selector)
 
+    # Exports
     def to_dict(self):
         data = deepcopy(self._traces_data)
         # BaseFigureWidget.transform_data(data, deepcopy(self._traces_deltas), should_remove=False)
         layout = deepcopy(self._layout_data)
         # BaseFigureWidget.transform_data(layout, deepcopy(self._layout_delta), should_remove=False)
         return {'data': data, 'layout': layout}
+
+    def save_html(self, filename, auto_open=False):
+        plotlypy_plot(self.to_dict(), filename=filename, show_link=False, auto_open=auto_open, validate=False)
+
+    def save_png(self, filename=None, scale_factor=2, border=20):
+        temp_filename = tempfile.mktemp() + '.html'
+        opts = webdriver.ChromeOptions()
+        opts.add_argument('headless')
+        browser = webdriver.Chrome(chrome_options=opts)
+
+        try:
+            self.save_html(filename=temp_filename)
+
+            browser.get(pathlib.Path(temp_filename).as_uri())
+
+            # Pixel ratio (2 for retina Macbook)
+            pixel_ratio = browser.execute_script("return window.devicePixelRatio")
+            browser.execute_script('document.body.style.webkitTransform = "scale({scale_factor/pixel_ratio})"')
+            browser.execute_script('document.body.style.webkitTransformOrigin = "0% 0%"')
+
+            browser.set_window_size(int(scale_factor / pixel_ratio * self.layout.width + 16),
+                                    int(scale_factor / pixel_ratio * self.layout.height + 16))
+            png = browser.get_screenshot_as_png()
+            b_rect = browser.execute_script(
+                "return document.getElementsByClassName('plot-container')[0].getBoundingClientRect()")
+
+            # Process image
+            image = Image.open(io.BytesIO(png))
+
+            crop_rect = tuple([pixel_ratio * b_rect[c] for c in ['left', 'top', 'right', 'bottom']])
+            image = image.crop(crop_rect)
+            image = ImageOps.expand(image, border=border, fill='white')
+
+            if filename:
+                image.save(filename)
+            return image
+        finally:
+            os.remove(temp_filename)
+            browser.quit()
 
     # Static helpers
     # --------------
