@@ -709,8 +709,19 @@ class BaseFigureWidget(widgets.DOMWidget):
         # BaseFigureWidget.transform_data(layout, deepcopy(self._layout_delta), should_remove=False)
         return {'data': data, 'layout': layout}
 
-    def save_html(self, filename, auto_open=False):
-        plotlypy_plot(self.to_dict(), filename=filename, show_link=False, auto_open=auto_open, validate=False)
+    def save_html(self, filename, auto_open=False, responsive=False):
+        data = self.to_dict()
+        if responsive:
+            if 'height' in data['layout']:
+                data['layout'].pop('height')
+            if 'width' in data['layout']:
+                data['layout'].pop('width')
+        else:
+            # Assign width/height explicitly in case these were defaults
+            data['layout']['height'] = self.layout.height
+            data['layout']['width'] = self.layout.width
+
+        plotlypy_plot(data, filename=filename, show_link=False, auto_open=auto_open, validate=False)
 
     def save_png(self, filename=None, scale_factor=2, border=20):
         temp_filename = tempfile.mktemp() + '.html'
@@ -719,18 +730,18 @@ class BaseFigureWidget(widgets.DOMWidget):
         browser = webdriver.Chrome(chrome_options=opts)
 
         try:
-            self.save_html(filename=temp_filename)
-
+            self.save_html(filename=temp_filename, responsive=False)
             browser.get(pathlib.Path(temp_filename).as_uri())
 
             # Pixel ratio (2 for retina Macbook)
             pixel_ratio = browser.execute_script("return window.devicePixelRatio")
-            browser.execute_script('document.body.style.webkitTransform = "scale({scale_factor/pixel_ratio})"')
-            browser.execute_script('document.body.style.webkitTransformOrigin = "0% 0%"')
+            browser.execute_script(f'document.body.style.webkitTransform = "scale({scale_factor/pixel_ratio})"')
+            browser.execute_script(f'document.body.style.webkitTransformOrigin = "0% 0%"')
 
-            browser.set_window_size(int(scale_factor / pixel_ratio * self.layout.width + 16),
-                                    int(scale_factor / pixel_ratio * self.layout.height + 16))
+            browser.set_window_size((scale_factor / pixel_ratio) * self.layout.width + 16,
+                                    (scale_factor / pixel_ratio) * self.layout.height + 16)
             png = browser.get_screenshot_as_png()
+
             b_rect = browser.execute_script(
                 "return document.getElementsByClassName('plot-container')[0].getBoundingClientRect()")
 
@@ -743,7 +754,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
             if filename:
                 image.save(filename)
-            return image
+                return image
         finally:
             os.remove(temp_filename)
             browser.quit()
