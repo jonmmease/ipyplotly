@@ -119,8 +119,8 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         # Message tracking
         # ----------------
-        self._relayout_msgs_in_process = set()
-        self._restyle_msgs_in_process = set()
+        self._last_relayout_msg_id = 0
+        self._last_restyle_msg_id = 0
 
     # ### Trait methods ###
     @observe('_js2py_styleDelta')
@@ -135,18 +135,17 @@ class BaseFigureWidget(widgets.DOMWidget):
             trace_uid = delta['uid']
 
             # Remove message id
-            msg_uid = delta.get('_msg_uid', None)
+            msg_id = delta.get('_restyle_msg_id', None)
             # pprint(delta)
-            if msg_uid in self._restyle_msgs_in_process:
-                self._restyle_msgs_in_process.remove(msg_uid)
 
-            trace_uids = [trace.uid for trace in self.traces]
-            trace_index = trace_uids.index(trace_uid)
-            uid_trace = self.traces[trace_index]
-            delta_transform = BaseFigureWidget.transform_data(uid_trace._delta, delta)
+            print(f'styleDelta: {msg_id} == {self._last_restyle_msg_id}')
+            if msg_id is None or msg_id == self._last_restyle_msg_id:
+                print('Processing styleDelta')
+                trace_uids = [trace.uid for trace in self.traces]
+                trace_index = trace_uids.index(trace_uid)
+                uid_trace = self.traces[trace_index]
+                delta_transform = BaseFigureWidget.transform_data(uid_trace._delta, delta)
 
-            if not self._restyle_msgs_in_process:
-                # print('No restyle messages in process')
                 removed_props = self.remove_overlapping_props(uid_trace._data, uid_trace._delta)
 
                 if removed_props:
@@ -154,8 +153,8 @@ class BaseFigureWidget(widgets.DOMWidget):
                     self._py2js_removeStyleProps = [removed_props, trace_index]
                     self._py2js_removeStyleProps = None
 
-            # print(delta_transform)
-            self._dispatch_change_callbacks_restyle(delta_transform, [trace_index])
+                # print(delta_transform)
+                self._dispatch_change_callbacks_restyle(delta_transform, [trace_index])
 
     @observe('_js2py_restyle')
     def handler_plotly_restylePython(self, change):
@@ -371,11 +370,14 @@ class BaseFigureWidget(widgets.DOMWidget):
         if not isinstance(trace_indexes, (list, tuple)):
             trace_indexes = [trace_indexes]
 
-        # Add uid
-        msg_uid = str(uuid.uuid1())
-        self._relayout_msgs_in_process.add(msg_uid)  # restyle can result in a restyle
-        self._restyle_msgs_in_process.add(msg_uid)
-        style['_msg_uid'] = msg_uid
+        # Add and update message ids
+        relayout_msg_id = self._last_relayout_msg_id + 1
+        style['_relayout_msg_id'] = relayout_msg_id
+        self._last_relayout_msg_id = relayout_msg_id
+
+        restyle_msg_id = self._last_restyle_msg_id + 1
+        style['_restyle_msg_id'] = restyle_msg_id
+        self._last_restyle_msg_id = restyle_msg_id
 
         restype_msg = (style, trace_indexes)
         # print('Restyle (Py->JS)')
@@ -413,6 +415,17 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._traces_data = self._traces_data + new_traces_data
         self._traces_deltas = self._traces_deltas + [{} for trace in traces]
         self._traces = self._traces + traces
+
+        # Update messages
+        relayout_msg_id = self._last_relayout_msg_id + 1
+        self._last_relayout_msg_id = relayout_msg_id
+
+        restyle_msg_id = self._last_restyle_msg_id + 1
+        self._last_restyle_msg_id = restyle_msg_id
+
+        for traces_data in new_traces_data:
+            traces_data['_relayout_msg_id'] = relayout_msg_id
+            traces_data['_restyle_msg_id'] = restyle_msg_id
 
         # Send to front end
         add_traces_msg = new_traces_data
@@ -461,17 +474,13 @@ class BaseFigureWidget(widgets.DOMWidget):
         if not delta:
             return
 
-        # print('layoutDelta: {deltas}'.format(deltas=delta))
-        delta_transform = self.transform_data(self._layout_delta, delta)
-        # print(f'delta_transform: {delta_transform}')
-
-        # Remove message id
-        msg_uid = delta.get('_msg_uid')
-        if msg_uid in self._relayout_msgs_in_process:
-            self._relayout_msgs_in_process.remove(msg_uid)
-
-        if not self._relayout_msgs_in_process:
-            # print('No relayout  messages in progress')
+        msg_id = delta.get('_relayout_msg_id', None)
+        print(f'layoutDelta: {msg_id} == {self._last_relayout_msg_id}')
+        if msg_id is None or msg_id == self._last_relayout_msg_id:
+            print('Processing layoutDelta')
+            # print('layoutDelta: {deltas}'.format(deltas=delta))
+            delta_transform = self.transform_data(self._layout_delta, delta)
+            # print(f'delta_transform: {delta_transform}')
 
             # No relayout messages in process. Handle removing overlapping properties
             removed_props = self.remove_overlapping_props(self._layout_data, self._layout_delta)
@@ -480,7 +489,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                 self._py2js_removeLayoutProps = removed_props
                 self._py2js_removeLayoutProps = None
 
-        self._dispatch_change_callbacks_relayout(delta_transform)
+            self._dispatch_change_callbacks_relayout(delta_transform)
 
     @property
     def layout(self):
@@ -515,9 +524,10 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     def _send_relayout_msg(self, layout):
         # print('Relayout (Py->JS): {layout}'.format(layout=layout))
-        msg_uid = str(uuid.uuid1())
-        self._relayout_msgs_in_process.add(msg_uid)
-        layout['_msg_uid'] = msg_uid
+
+        msg_id = self._last_relayout_msg_id + 1
+        layout['_relayout_msg_id'] = msg_id
+        self._last_relayout_msg_id = msg_id
 
         self._py2js_relayout = layout
         self._py2js_relayout = None
