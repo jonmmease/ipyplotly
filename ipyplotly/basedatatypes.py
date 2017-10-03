@@ -7,7 +7,7 @@ from math import isclose
 from pprint import pprint
 
 import ipywidgets as widgets
-from traitlets import List, Unicode, Dict, default, observe
+from traitlets import List, Unicode, Dict, default, observe, Integer
 
 from ipyplotly.callbacks import Points, BoxSelector, LassoSelector, InputState
 from ipyplotly.validators.layout import XaxisValidator, YaxisValidator, GeoValidator, TernaryValidator, SceneValidator
@@ -62,7 +62,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     _py2js_restyle = List(allow_none=True).tag(sync=True)
     _py2js_relayout = Dict(allow_none=True).tag(sync=True)
 
-    _py2js_deleteTraces = List(allow_none=True).tag(sync=True)
+    _py2js_deleteTraces = Dict(allow_none=True).tag(sync=True)
     _py2js_moveTraces = List(allow_none=True).tag(sync=True)
 
     _py2js_removeLayoutProps = List(allow_none=True).tag(sync=True)
@@ -76,6 +76,10 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # For plotly_select/hover/unhover/click
     _js2py_pointsCallback = Dict(allow_none=True).tag(sync=True)
+
+    # Message tracking
+    _last_relayout_msg_id = Integer(0).tag(sync=True)
+    _last_restyle_msg_id = Integer(0).tag(sync=True)
 
     # Constructor
     # -----------
@@ -117,11 +121,6 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._layout._parent = self
         self._layout_delta = {}
 
-        # Message tracking
-        # ----------------
-        self._last_relayout_msg_id = 0
-        self._last_restyle_msg_id = 0
-
     # ### Trait methods ###
     @observe('_js2py_styleDelta')
     def handler_plotly_styleDelta(self, change):
@@ -138,9 +137,9 @@ class BaseFigureWidget(widgets.DOMWidget):
             msg_id = delta.get('_restyle_msg_id', None)
             # pprint(delta)
 
-            print(f'styleDelta: {msg_id} == {self._last_restyle_msg_id}')
-            if msg_id is None or msg_id == self._last_restyle_msg_id:
-                print('Processing styleDelta')
+            # print(f'styleDelta: {msg_id} == {self._last_restyle_msg_id}')
+            if msg_id == self._last_restyle_msg_id:
+                # print('Processing styleDelta')
                 trace_uids = [trace.uid for trace in self.traces]
                 trace_index = trace_uids.index(trace_uid)
                 uid_trace = self.traces[trace_index]
@@ -149,7 +148,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                 removed_props = self.remove_overlapping_props(uid_trace._data, uid_trace._delta)
 
                 if removed_props:
-                    print(f'Removed_props: {removed_props}')
+                    # print(f'Removed_props: {removed_props}')
                     self._py2js_removeStyleProps = [removed_props, trace_index]
                     self._py2js_removeStyleProps = None
 
@@ -208,10 +207,10 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         # Compute traces to remove
         remove_uids = set(orig_uids).difference(set(new_uids))
-        remove_inds = []
+        delete_inds = []
         for i, _trace in enumerate(self._traces_data):
             if _trace['uid'] in remove_uids:
-                remove_inds.append(i)
+                delete_inds.append(i)
 
                 # Unparent trace object to be removed
                 old_trace = self.traces[i]
@@ -221,12 +220,16 @@ class BaseFigureWidget(widgets.DOMWidget):
         # Compute trace data list after removal
         traces_data_post_removal = [t for t in self._traces_data]
         traces_deltas_post_removal = [t for t in self._traces_deltas]
-        for i in reversed(remove_inds):
+        for i in reversed(delete_inds):
             del traces_data_post_removal[i]
             del traces_deltas_post_removal[i]
 
-        if remove_inds:
-            self._py2js_deleteTraces = remove_inds
+        if delete_inds:
+            relayout_msg_id = self._last_relayout_msg_id + 1
+            self._last_relayout_msg_id = relayout_msg_id
+
+            self._py2js_deleteTraces = {'delete_inds': delete_inds,
+                                        '_relayout_msg_id ': relayout_msg_id}
             self._py2js_deleteTraces = None
 
         # Compute move traces
@@ -428,6 +431,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             traces_data['_restyle_msg_id'] = restyle_msg_id
 
         # Send to front end
+        # print(f'addTraces: {traces_data}')
         add_traces_msg = new_traces_data
         self._py2js_addTraces = add_traces_msg
         self._py2js_addTraces = None
@@ -475,9 +479,9 @@ class BaseFigureWidget(widgets.DOMWidget):
             return
 
         msg_id = delta.get('_relayout_msg_id', None)
-        print(f'layoutDelta: {msg_id} == {self._last_relayout_msg_id}')
-        if msg_id is None or msg_id == self._last_relayout_msg_id:
-            print('Processing layoutDelta')
+        # print(f'layoutDelta: {msg_id} == {self._last_relayout_msg_id}')
+        if msg_id == self._last_relayout_msg_id:
+            # print('Processing layoutDelta')
             # print('layoutDelta: {deltas}'.format(deltas=delta))
             delta_transform = self.transform_data(self._layout_delta, delta)
             # print(f'delta_transform: {delta_transform}')
@@ -485,7 +489,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             # No relayout messages in process. Handle removing overlapping properties
             removed_props = self.remove_overlapping_props(self._layout_data, self._layout_delta)
             if removed_props:
-                print(f'Removed_props: {removed_props}')
+                # print(f'Removed_props: {removed_props}')
                 self._py2js_removeLayoutProps = removed_props
                 self._py2js_removeLayoutProps = None
 
@@ -559,6 +563,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         relayout_msg = {}  # relayout data to send to JS side as Plotly.relayout()
 
         # Update layout_data
+        # print('_perform_relayout')
         for raw_key, v in relayout_data.items():
             # kstr may have periods. e.g. foo.bar
             key_path = self._str_to_dict_path(raw_key)
