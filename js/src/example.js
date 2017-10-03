@@ -675,21 +675,25 @@ var FigureView = widgets.DOMWidgetView.extend({
             style['_doNotReportToPy'] = true;
             Plotly.restyle(this.el, style, idx);
 
+            // uid
+            var msg_uid = style['_msg_uid'];
+
             // Send back style delta
             var traceDeltas = new Array(idx.length);
             var trace_data = this.model.get('_traces_data');
             var fullData = this.getFullData();
             for (var i = 0; i < idx.length; i++) {
                 traceDeltas[i] = this.create_delta_object(trace_data[idx[i]], fullData[idx[i]]);
+                traceDeltas[i]['_msg_uid'] = msg_uid;
                 console.log(traceDeltas[i]);
                 console.log(trace_data[idx[i]]);
             }
-
 
             this.model.set('_js2py_styleDelta', traceDeltas);
 
             // Send back layout delta
             var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
+            relayoutDelta['_msg_uid'] = msg_uid;
             this.model.set('_js2py_layoutDelta', relayoutDelta);
 
             this.touch();
@@ -708,6 +712,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             Plotly.relayout(this.el, data);
 
             var layoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
+            layoutDelta['_msg_uid'] = data['_msg_uid'];
             console.log(layoutDelta);
             console.log(this.model.get('_layout_data'));
             this.model.set('_js2py_layoutDelta', layoutDelta);
@@ -761,13 +766,20 @@ var FigureView = widgets.DOMWidgetView.extend({
                     var full_val = fullData[p];
                     if (data.hasOwnProperty(p) && typeof full_val === 'object') {
                         if(Array.isArray(full_val)) {
-                            res[p] = new Array(full_val.length);
-                            for (var i = 0; i < full_val.length; i++) {
-                                if (!Array.isArray(data[p]) || data[p].length <= i) {
-                                    res[p][i] = full_val[i]
-                                } else {
-                                    res[p][i] = this.create_delta_object(data[p][i], full_val[i]);
+
+                            if (full_val.length > 0 && typeof(full_val[0]) === 'object') {
+                                // We have an object array
+                                res[p] = new Array(full_val.length);
+                                for (var i = 0; i < full_val.length; i++) {
+                                    if (!Array.isArray(data[p]) || data[p].length <= i) {
+                                        res[p][i] = full_val[i]
+                                    } else {
+                                        res[p][i] = this.create_delta_object(data[p][i], full_val[i]);
+                                    }
                                 }
+                            } else {
+                                // We have a primitive array
+                                res[p] = full_val;
                             }
                         } else { // object
                             var full_obj = this.create_delta_object(data[p], full_val);

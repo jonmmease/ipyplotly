@@ -1,6 +1,7 @@
 import collections
 import re
 import typing as typ
+import uuid
 from copy import deepcopy
 from math import isclose
 from pprint import pprint
@@ -116,9 +117,14 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._layout._parent = self
         self._layout_delta = {}
 
+        # Message tracking
+        # ----------------
+        self._relayout_msgs_in_process = set()
+        self._restyle_msgs_in_process = set()
+
     # ### Trait methods ###
     @observe('_js2py_styleDelta')
-    def handler_plotly_restyleDelta(self, change):
+    def handler_plotly_styleDelta(self, change):
         deltas = change['new']
         self._js2py_styleDelta = None
 
@@ -126,18 +132,27 @@ class BaseFigureWidget(widgets.DOMWidget):
             return
 
         for delta in deltas:
-            uid = delta['uid']
+            trace_uid = delta['uid']
+
+            # Remove message id
+            msg_uid = delta.get('_msg_uid', None)
+            # pprint(delta)
+            if msg_uid in self._restyle_msgs_in_process:
+                self._restyle_msgs_in_process.remove(msg_uid)
+
             trace_uids = [trace.uid for trace in self.traces]
-            trace_index = trace_uids.index(uid)
+            trace_index = trace_uids.index(trace_uid)
             uid_trace = self.traces[trace_index]
             delta_transform = BaseFigureWidget.transform_data(uid_trace._delta, delta)
 
-            removed_props = self.remove_overlapping_props(uid_trace._data, uid_trace._delta)
+            if not self._restyle_msgs_in_process:
+                # print('No restyle messages in process')
+                removed_props = self.remove_overlapping_props(uid_trace._data, uid_trace._delta)
 
-            if removed_props:
-                print(f'Removed_props: {removed_props}')
-                self._py2js_removeStyleProps = [removed_props, trace_index]
-                self._py2js_removeStyleProps = None
+                if removed_props:
+                    print(f'Removed_props: {removed_props}')
+                    self._py2js_removeStyleProps = [removed_props, trace_index]
+                    self._py2js_removeStyleProps = None
 
             # print(delta_transform)
             self._dispatch_change_callbacks_restyle(delta_transform, [trace_index])
@@ -356,6 +371,12 @@ class BaseFigureWidget(widgets.DOMWidget):
         if not isinstance(trace_indexes, (list, tuple)):
             trace_indexes = [trace_indexes]
 
+        # Add uid
+        msg_uid = str(uuid.uuid1())
+        self._relayout_msgs_in_process.add(msg_uid)  # restyle can result in a restyle
+        self._restyle_msgs_in_process.add(msg_uid)
+        style['_msg_uid'] = msg_uid
+
         restype_msg = (style, trace_indexes)
         # print('Restyle (Py->JS)')
         # pprint(restype_msg)
@@ -444,12 +465,20 @@ class BaseFigureWidget(widgets.DOMWidget):
         delta_transform = self.transform_data(self._layout_delta, delta)
         # print(f'delta_transform: {delta_transform}')
 
-        # print(f'_layout_data: {self._layout_data}')
-        removed_props = self.remove_overlapping_props(self._layout_data, self._layout_delta)
-        if removed_props:
-            # print(f'removed_props: {removed_props}')
-            self._py2js_removeLayoutProps = removed_props
-            self._py2js_removeLayoutProps = None
+        # Remove message id
+        msg_uid = delta.get('_msg_uid')
+        if msg_uid in self._relayout_msgs_in_process:
+            self._relayout_msgs_in_process.remove(msg_uid)
+
+        if not self._relayout_msgs_in_process:
+            # print('No relayout  messages in progress')
+
+            # No relayout messages in process. Handle removing overlapping properties
+            removed_props = self.remove_overlapping_props(self._layout_data, self._layout_delta)
+            if removed_props:
+                print(f'Removed_props: {removed_props}')
+                self._py2js_removeLayoutProps = removed_props
+                self._py2js_removeLayoutProps = None
 
         self._dispatch_change_callbacks_relayout(delta_transform)
 
@@ -474,19 +503,22 @@ class BaseFigureWidget(widgets.DOMWidget):
         new_layout._parent = self
         self._layout = new_layout
 
-        # TODO: clear deltas, clear property callbacks
-
         # Notify JS side
         self._send_relayout_msg(new_layout_data)
 
     def _relayout_child(self, child, prop, val):
         send_val = val  # Don't wrap in a list for relayout
         relayout_msg = {prop: send_val}
+
         self._dispatch_change_callbacks_relayout(relayout_msg)
         self._send_relayout_msg(relayout_msg)
 
     def _send_relayout_msg(self, layout):
         # print('Relayout (Py->JS): {layout}'.format(layout=layout))
+        msg_uid = str(uuid.uuid1())
+        self._relayout_msgs_in_process.add(msg_uid)
+        layout['_msg_uid'] = msg_uid
+
         self._py2js_relayout = layout
         self._py2js_relayout = None
 
@@ -509,6 +541,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         # print(f'Relayout: {relayout_data}')
         relayout_msg = self._perform_relayout(relayout_data)
         if relayout_msg:
+
             self._dispatch_change_callbacks_relayout(relayout_msg)
             self._send_relayout_msg(relayout_msg)
 
@@ -850,6 +883,8 @@ class BaseFigureWidget(widgets.DOMWidget):
                             relayout_path=relayout_path + (from_prop,)))
                 else:
                     if from_prop not in to_data or to_data[from_prop] != from_val:
+                        # if from_prop in to_data:
+                        #     print(f'to_data[from_prop] != from_val -- {to_data}[{from_prop}] != {from_val}:')
                         to_data[from_prop] = from_val
                         relayout_terms[relayout_path + (from_prop,)] = from_val
 
@@ -1150,7 +1185,7 @@ class BasePlotlyType:
             raise ValueError('At least one property/subproperty must be specified')
 
         # TODO: Validate that args valid properties / subproperties
-        validated_args = tuple(sorted([a if isinstance(a, tuple) else (a,) for a in args]))
+        validated_args = tuple([a if isinstance(a, tuple) else (a,) for a in args])
 
         # TODO: add append arg and store list of callbacks
         self._change_callbacks[validated_args] = callback

@@ -526,6 +526,7 @@ class ColorValidator(BaseValidator):
 
         # Remove spaces so regexes don't need to bother with them.
         v = v.replace(' ', '')
+        v = v.lower()
 
         if ColorValidator.re_hex.fullmatch(v):
             # valid hex color (e.g. #f34ab3)
@@ -882,7 +883,7 @@ class ArrayValidator(BaseValidator):
                 else:
                     raise ValueError(("The {name} property of {parent_name} must be a list or tuple "
                                       "of {cls_name} instances.\n"
-                                      "Received {col_typ} with an instance of type {typ}"
+                                      "Received {col_type} with an instance of type {typ}"
                                       ).format(name=self.name,
                                                parent_name=self.parent_name,
                                                cls_name=self.data_class.__name__,
