@@ -7,7 +7,7 @@ from math import isclose
 from pprint import pprint
 
 import ipywidgets as widgets
-from traitlets import List, Unicode, Dict, default, observe, Integer
+from traitlets import List, Unicode, Dict, default, observe, Integer, Bool
 
 from ipyplotly.callbacks import Points, BoxSelector, LassoSelector, InputState
 from ipyplotly.validators.layout import XaxisValidator, YaxisValidator, GeoValidator, TernaryValidator, SceneValidator
@@ -19,6 +19,9 @@ import io
 import tempfile
 import os
 import pathlib
+import threading
+import asyncio
+
 
 # TODO:
 # Callbacks
@@ -121,6 +124,15 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._layout._parent = self
         self._layout_delta = {}
 
+        # Process messagas
+        self._relayout_in_process = False
+        self._waiting_relayout_callbacks = []
+
+        self._restyle_in_process = False
+        self._waiting_restyle_callbacks = []
+
+        self._view_count = 0
+
     # ### Trait methods ###
     @observe('_js2py_styleDelta')
     def handler_plotly_styleDelta(self, change):
@@ -130,15 +142,15 @@ class BaseFigureWidget(widgets.DOMWidget):
         if not deltas:
             return
 
-        for delta in deltas:
-            trace_uid = delta['uid']
+        msg_id = deltas[0].get('_restyle_msg_id', None)
+        # print(f'styleDelta: {msg_id} == {self._last_restyle_msg_id}')
+        if msg_id == self._last_restyle_msg_id:
+            for delta in deltas:
+                trace_uid = delta['uid']
 
-            # Remove message id
-            msg_id = delta.get('_restyle_msg_id', None)
-            # pprint(delta)
+                # Remove message id
+                # pprint(delta)
 
-            # print(f'styleDelta: {msg_id} == {self._last_restyle_msg_id}')
-            if msg_id == self._last_restyle_msg_id:
                 # print('Processing styleDelta')
                 trace_uids = [trace.uid for trace in self.traces]
                 trace_index = trace_uids.index(trace_uid)
@@ -154,6 +166,11 @@ class BaseFigureWidget(widgets.DOMWidget):
 
                 # print(delta_transform)
                 self._dispatch_change_callbacks_restyle(delta_transform, [trace_index])
+
+            self._restyle_in_process = False
+            while self._waiting_restyle_callbacks:
+                # Call callbacks
+                self._waiting_restyle_callbacks.pop()()
 
     @observe('_js2py_restyle')
     def handler_plotly_restylePython(self, change):
@@ -227,6 +244,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         if delete_inds:
             relayout_msg_id = self._last_relayout_msg_id + 1
             self._last_relayout_msg_id = relayout_msg_id
+            self._relayout_in_process = True
 
             self._py2js_deleteTraces = {'delete_inds': delete_inds,
                                         '_relayout_msg_id ': relayout_msg_id}
@@ -377,10 +395,12 @@ class BaseFigureWidget(widgets.DOMWidget):
         relayout_msg_id = self._last_relayout_msg_id + 1
         style['_relayout_msg_id'] = relayout_msg_id
         self._last_relayout_msg_id = relayout_msg_id
+        self._relayout_in_process = True
 
         restyle_msg_id = self._last_restyle_msg_id + 1
         style['_restyle_msg_id'] = restyle_msg_id
         self._last_restyle_msg_id = restyle_msg_id
+        self._restyle_in_process = True
 
         restype_msg = (style, trace_indexes)
         # print('Restyle (Py->JS)')
@@ -422,9 +442,11 @@ class BaseFigureWidget(widgets.DOMWidget):
         # Update messages
         relayout_msg_id = self._last_relayout_msg_id + 1
         self._last_relayout_msg_id = relayout_msg_id
+        self._relayout_in_process = True
 
         restyle_msg_id = self._last_restyle_msg_id + 1
         self._last_restyle_msg_id = restyle_msg_id
+        self._restyle_in_process = True
 
         for traces_data in new_traces_data:
             traces_data['_relayout_msg_id'] = relayout_msg_id
@@ -478,7 +500,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         if not delta:
             return
 
-        msg_id = delta.get('_relayout_msg_id', None)
+        msg_id = delta.get('_relayout_msg_id')
         # print(f'layoutDelta: {msg_id} == {self._last_relayout_msg_id}')
         if msg_id == self._last_relayout_msg_id:
             # print('Processing layoutDelta')
@@ -494,6 +516,10 @@ class BaseFigureWidget(widgets.DOMWidget):
                 self._py2js_removeLayoutProps = None
 
             self._dispatch_change_callbacks_relayout(delta_transform)
+            self._relayout_in_process = False
+            while self._waiting_relayout_callbacks:
+                # Call callbacks
+                self._waiting_relayout_callbacks.pop()()
 
     @property
     def layout(self):
@@ -528,6 +554,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     def _send_relayout_msg(self, layout):
         # print('Relayout (Py->JS): {layout}'.format(layout=layout))
+
 
         msg_id = self._last_relayout_msg_id + 1
         layout['_relayout_msg_id'] = msg_id
@@ -749,7 +776,20 @@ class BaseFigureWidget(widgets.DOMWidget):
             elif event_type == 'plotly_selected':
                 trace._dispatch_on_selected(points, selector)
 
+    def on_relayout_completed(self, fn):
+        if self._relayout_in_process:
+            self._waiting_relayout_callbacks.append(fn)
+        else:
+            fn()
+
+    def on_restyle_completed(self, fn):
+        if self._restyle_in_process:
+            self._waiting_restyle_callbacks.append(fn)
+        else:
+            fn()
+
     # Exports
+    # -------
     def to_dict(self):
         data = deepcopy(self._traces_data)
         # BaseFigureWidget.transform_data(data, deepcopy(self._traces_deltas), should_remove=False)
