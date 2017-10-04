@@ -4,7 +4,6 @@ import re
 import typing as typ
 import uuid
 from copy import deepcopy
-from math import isclose
 from pprint import pprint
 
 import ipywidgets as widgets
@@ -20,9 +19,6 @@ import io
 import tempfile
 import os
 import pathlib
-import threading
-import asyncio
-import time
 
 # TODO:
 # Callbacks
@@ -126,9 +122,6 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._layout_delta = {}
 
         # Process messagas
-        self._relayouts_complete = asyncio.Event(loop=None)
-        self._relayouts_complete.set()
-
         self._relayout_in_process = False
         self._waiting_relayout_callbacks = []
 
@@ -249,7 +242,6 @@ class BaseFigureWidget(widgets.DOMWidget):
             relayout_msg_id = self._last_relayout_msg_id + 1
             self._last_relayout_msg_id = relayout_msg_id
             self._relayout_in_process = True
-            self._relayouts_complete.clear()
 
             self._py2js_deleteTraces = {'delete_inds': delete_inds,
                                         '_relayout_msg_id ': relayout_msg_id}
@@ -401,7 +393,6 @@ class BaseFigureWidget(widgets.DOMWidget):
         style['_relayout_msg_id'] = relayout_msg_id
         self._last_relayout_msg_id = relayout_msg_id
         self._relayout_in_process = True
-        self._relayouts_complete.clear()
 
         restyle_msg_id = self._last_restyle_msg_id + 1
         style['_restyle_msg_id'] = restyle_msg_id
@@ -449,7 +440,6 @@ class BaseFigureWidget(widgets.DOMWidget):
         relayout_msg_id = self._last_relayout_msg_id + 1
         self._last_relayout_msg_id = relayout_msg_id
         self._relayout_in_process = True
-        self._relayouts_complete.clear()
 
         restyle_msg_id = self._last_restyle_msg_id + 1
         self._last_restyle_msg_id = restyle_msg_id
@@ -524,7 +514,6 @@ class BaseFigureWidget(widgets.DOMWidget):
 
             self._dispatch_change_callbacks_relayout(delta_transform)
             self._relayout_in_process = False
-            self._relayouts_complete.set()
             print('gets here at ' + datetime.datetime.now().strftime("%H:%M:%S"))
             while self._waiting_relayout_callbacks:
                 # Call callbacks
