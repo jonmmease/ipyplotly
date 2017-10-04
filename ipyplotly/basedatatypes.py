@@ -61,6 +61,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     _py2js_restyle = List(allow_none=True).tag(sync=True)
     _py2js_relayout = Dict(allow_none=True).tag(sync=True)
+    _py2js_update = List(allow_none=True).tag(sync=True)
 
     _py2js_deleteTraces = Dict(allow_none=True).tag(sync=True)
     _py2js_moveTraces = List(allow_none=True).tag(sync=True)
@@ -73,6 +74,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     _js2py_layoutDelta = Dict(allow_none=True).tag(sync=True)
     _js2py_restyle = List(allow_none=True).tag(sync=True)
     _js2py_relayout = Dict(allow_none=True).tag(sync=True)
+    _js2py_update = Dict(allow_none=True).tag(sync=True)
 
     # For plotly_select/hover/unhover/click
     _js2py_pointsCallback = Dict(allow_none=True).tag(sync=True)
@@ -574,10 +576,9 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         self.relayout(relayout_data)
 
-
-    def relayout(self, relayout_data):
-        # print(f'Relayout: {relayout_data}')
-        relayout_msg = self._perform_relayout(relayout_data)
+    def relayout(self, layout):
+        # print(f'Relayout: {layout}')
+        relayout_msg = self._perform_relayout(layout)
         if relayout_msg:
 
             self._dispatch_change_callbacks_relayout(relayout_msg)
@@ -671,34 +672,61 @@ class BaseFigureWidget(widgets.DOMWidget):
             changed_paths = p['changed_paths']
             obj._dispatch_change_callbacks(changed_paths)
 
-    @staticmethod
-    def _str_to_dict_path(raw_key):
-
-        if isinstance(raw_key, tuple):
+    # Update
+    # ------
+    def update(self, style=None, layout=None, trace_indexes=None):
+        if not style and not layout:
             # Nothing to do
-            return raw_key
-        else:
-            # Split string on periods. e.g. 'foo.bar[0]' -> ['foo', 'bar[0]']
-            key_path = raw_key.split('.')
+            return
 
-            # Split out bracket indexes. e.g. ['foo', 'bar[0]'] -> ['foo', 'bar', '0']
-            bracket_re = re.compile('(.*)\[(\d+)\]')
-            key_path2 = []
-            for key in key_path:
-                match = bracket_re.fullmatch(key)
-                if match:
-                    key_path2.extend(match.groups())
-                else:
-                    key_path2.append(key)
+        if style is None:
+            style = {}
+        if layout is None:
+            layout = {}
 
-            # Convert elements to ints if possible. e.g. e.g. ['foo', 'bar', '0'] -> ['foo', 'bar', 0]
-            for i in range(len(key_path2)):
-                try:
-                    key_path2[i] = int(key_path2[i])
-                except ValueError as _:
-                    pass
+        # Process trace indexes
+        if trace_indexes is None:
+            trace_indexes = list(range(len(self.traces)))
 
-            return tuple(key_path2)
+        if not isinstance(trace_indexes, (list, tuple)):
+            trace_indexes = [trace_indexes]
+
+        # Perform restyle portion of update
+        restyle_msg = self._perform_restyle(style, trace_indexes)
+        if restyle_msg:
+            self._dispatch_change_callbacks_restyle(restyle_msg, trace_indexes)
+
+        # Perform relayout portion of update
+        relayout_msg = self._perform_relayout(layout)
+        if relayout_msg:
+            self._dispatch_change_callbacks_relayout(relayout_msg)
+
+        if restyle_msg or relayout_msg:
+            self._send_update_msg(restyle_msg, relayout_msg, trace_indexes)
+
+    def _send_update_msg(self, style, layout, trace_indexes=None):
+        if not isinstance(trace_indexes, (list, tuple)):
+            trace_indexes = [trace_indexes]
+
+        # Add restyle message id
+        restyle_msg_id = self._last_restyle_msg_id + 1
+        style['_restyle_msg_id'] = restyle_msg_id
+        self._last_restyle_msg_id = restyle_msg_id
+        self._restyle_in_process = True
+
+        # Add relayout message id
+        relayout_msg_id = self._last_relayout_msg_id + 1
+        layout['_relayout_msg_id'] = relayout_msg_id
+        self._last_relayout_msg_id = relayout_msg_id
+        self._relayout_in_process = True
+
+        update_msg = (style, layout, trace_indexes)
+
+        # print('Update (Py->JS)')
+        # pprint(update_msg)
+
+        self._py2js_update = update_msg
+        self._py2js_update = None
 
     # Callbacks
     # ---------
@@ -846,6 +874,35 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # Static helpers
     # --------------
+    @staticmethod
+    def _str_to_dict_path(raw_key):
+
+        if isinstance(raw_key, tuple):
+            # Nothing to do
+            return raw_key
+        else:
+            # Split string on periods. e.g. 'foo.bar[0]' -> ['foo', 'bar[0]']
+            key_path = raw_key.split('.')
+
+            # Split out bracket indexes. e.g. ['foo', 'bar[0]'] -> ['foo', 'bar', '0']
+            bracket_re = re.compile('(.*)\[(\d+)\]')
+            key_path2 = []
+            for key in key_path:
+                match = bracket_re.fullmatch(key)
+                if match:
+                    key_path2.extend(match.groups())
+                else:
+                    key_path2.append(key)
+
+            # Convert elements to ints if possible. e.g. e.g. ['foo', 'bar', '0'] -> ['foo', 'bar', 0]
+            for i in range(len(key_path2)):
+                try:
+                    key_path2[i] = int(key_path2[i])
+                except ValueError as _:
+                    pass
+
+            return tuple(key_path2)
+
     @staticmethod
     def _is_object_list(v):
         return isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict)

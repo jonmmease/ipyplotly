@@ -22,6 +22,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         _py2js_moveTraces: null,
         _py2js_restyle: null,
         _py2js_relayout: null,
+        _py2js_update: null,
 
         _py2js_removeLayoutProps: null,
         _py2js_removeStyleProps: null,
@@ -29,6 +30,8 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         // JS -> Python
         _js2py_restyle: null,
         _js2py_relayout: null,
+        _js2py_update: null,
+
         _js2py_layoutDelta: null,
         _js2py_tracesDelta: null,
 
@@ -46,6 +49,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
         this.on("change:_py2js_restyle", this.do_restyle, this);
         this.on("change:_py2js_relayout", this.do_relayout, this);
+        this.on("change:_py2js_update", this.do_update, this);
         this.on("change:_py2js_removeLayoutProps", this.do_removeLayoutProps, this);
         this.on("change:_py2js_removeStyleProps", this.do_removeStyleProps, this);
     },
@@ -80,7 +84,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         return keyPath2
     },
 
-    normalize_trace_indexes: function (trace_indexes, num_traces) {
+    normalize_trace_indexes: function (trace_indexes) {
         if (trace_indexes === null || trace_indexes === undefined) {
             var numTraces = this.get('_traces_data').length;
             trace_indexes = Array.apply(null, new Array(numTraces)).map(function (_, i) {return i;});
@@ -223,6 +227,21 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         }
     },
 
+    do_update: function() {
+        console.log('FigureModel: do_update');
+        var data = this.get('_py2js_update');
+        if (data !== null) {
+            console.log(data);
+
+            var style = data[0];
+            var layout = data[1];
+            var trace_indexes = this.normalize_trace_indexes(data[2]);
+            this._performRestyle(style, trace_indexes);
+            this._performRelayout(layout);
+        }
+    },
+
+    // ### Remove props ###
     do_removeLayoutProps: function () {
         console.log('FigureModel:do_removeLayoutProps');
         var data = this.get('_py2js_removeLayoutProps');
@@ -338,6 +357,7 @@ var FigureView = widgets.DOMWidgetView.extend({
         this.model.on('change:_py2js_moveTraces', this.do_moveTraces, this);
         this.model.on('change:_py2js_restyle', this.do_restyle, this);
         this.model.on("change:_py2js_relayout", this.do_relayout, this);
+        this.model.on("change:_py2js_update", this.do_update, this);
 
         this.model.on('change:_traces_data', function () {
             console.log('change:_traces_data');
@@ -348,6 +368,8 @@ var FigureView = widgets.DOMWidgetView.extend({
         var that = this;
         this.el.on('plotly_restyle', function(update) {that.handle_plotly_restyle(update)});
         this.el.on('plotly_relayout', function(update) {that.handle_plotly_relayout(update)});
+        this.el.on('plotly_update', function(update) {that.handle_plotly_update(update)});
+
         this.el.on('plotly_click', function(update) {that.handle_plotly_click(update)});
         this.el.on('plotly_hover', function(update) {that.handle_plotly_hover(update)});
         this.el.on('plotly_unhover', function(update) {that.handle_plotly_unhover(update)});
@@ -510,6 +532,18 @@ var FigureView = widgets.DOMWidgetView.extend({
         }
 
         this.model.set('_js2py_relayout', data);
+        this.touch();
+    },
+
+    handle_plotly_update: function (data) {
+        if (data !== null && data !== undefined && data.hasOwnProperty('_doNotReportToPy')) {
+            // Relayout originated on the Python side
+            return
+        }
+
+        console.log("plotly_relayout");
+        console.log(data);
+        this.model.set('_js2py_update', data);
         this.touch();
     },
 
@@ -681,31 +715,21 @@ var FigureView = widgets.DOMWidgetView.extend({
         var data = this.model.get('_py2js_restyle');
         if (data !== null) {
             var style = data[0];
-            var idx = data[1];
-
-            if (idx === null || idx === undefined) {
-                idx = Array.apply(null, Array(this.el.data.length)).map(function (_, i) {return i;});
-            }
-            if (!Array.isArray(idx)) {
-                // Make sure idx is an array
-                idx = [idx];
-            }
+            var trace_indexes = this.model.normalize_trace_indexes(data[1]);
 
             style['_doNotReportToPy'] = true;
-            Plotly.restyle(this.el, style, idx);
+            Plotly.restyle(this.el, style, trace_indexes);
 
             // uid
             var restyle_msg_id = style['_restyle_msg_id'];
 
             // Send back style delta
-            var traceDeltas = new Array(idx.length);
+            var traceDeltas = new Array(trace_indexes.length);
             var trace_data = this.model.get('_traces_data');
             var fullData = this.getFullData();
-            for (var i = 0; i < idx.length; i++) {
-                traceDeltas[i] = this.create_delta_object(trace_data[idx[i]], fullData[idx[i]]);
+            for (var i = 0; i < trace_indexes.length; i++) {
+                traceDeltas[i] = this.create_delta_object(trace_data[trace_indexes[i]], fullData[trace_indexes[i]]);
                 traceDeltas[i]['_restyle_msg_id'] = restyle_msg_id;
-                console.log(traceDeltas[i]);
-                console.log(trace_data[idx[i]]);
             }
 
             this.model.set('_js2py_styleDelta', traceDeltas);
@@ -717,9 +741,6 @@ var FigureView = widgets.DOMWidgetView.extend({
             this.model.set('_js2py_layoutDelta', relayoutDelta);
 
             this.touch();
-
-            console.log('New el.data');
-            console.log(this.el.data);
         }
     },
 
@@ -739,6 +760,41 @@ var FigureView = widgets.DOMWidgetView.extend({
             console.log(layoutDelta);
             console.log(this.model.get('_layout_data'));
             this.model.set('_js2py_layoutDelta', layoutDelta);
+
+            this.touch();
+        }
+    },
+
+    do_update: function () {
+        console.log('FigureView: do_update');
+        var data = this.model.get('_py2js_update');
+        if (data !== null) {
+            var style = data[0];
+            var layout = data[1];
+            var trace_indexes = this.model.normalize_trace_indexes(data[2]);
+
+            style['_doNotReportToPy'] = true;
+            Plotly.update(this.el, style, layout, trace_indexes);
+
+            // uid
+            var restyle_msg_id = style['_restyle_msg_id'];
+
+            // Send back style delta
+            var traceDeltas = new Array(trace_indexes.length);
+            var trace_data = this.model.get('_traces_data');
+            var fullData = this.getFullData();
+            for (var i = 0; i < trace_indexes.length; i++) {
+                traceDeltas[i] = this.create_delta_object(trace_data[trace_indexes[i]], fullData[trace_indexes[i]]);
+                traceDeltas[i]['_restyle_msg_id'] = restyle_msg_id;
+            }
+
+            this.model.set('_js2py_styleDelta', traceDeltas);
+
+            // Send back layout delta
+            var relayout_msg_id = layout['_relayout_msg_id'];
+            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
+            relayoutDelta['_relayout_msg_id'] = relayout_msg_id;
+            this.model.set('_js2py_layoutDelta', relayoutDelta);
 
             this.touch();
         }
