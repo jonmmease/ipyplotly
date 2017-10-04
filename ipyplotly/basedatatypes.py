@@ -498,7 +498,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             return
 
         msg_id = delta.get('_relayout_msg_id')
-        print(f'layoutDelta: {msg_id} == {self._last_relayout_msg_id}')
+        # print(f'layoutDelta: {msg_id} == {self._last_relayout_msg_id}')
         if msg_id == self._last_relayout_msg_id:
             # print('Processing layoutDelta')
             # print('layoutDelta: {deltas}'.format(deltas=delta))
@@ -514,7 +514,6 @@ class BaseFigureWidget(widgets.DOMWidget):
 
             self._dispatch_change_callbacks_relayout(delta_transform)
             self._relayout_in_process = False
-            print('gets here at ' + datetime.datetime.now().strftime("%H:%M:%S"))
             while self._waiting_relayout_callbacks:
                 # Call callbacks
                 self._waiting_relayout_callbacks.pop()()
