@@ -1,4 +1,5 @@
 import collections
+import datetime
 import re
 import typing as typ
 import uuid
@@ -21,7 +22,7 @@ import os
 import pathlib
 import threading
 import asyncio
-
+import time
 
 # TODO:
 # Callbacks
@@ -86,7 +87,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # Constructor
     # -----------
-    def __init__(self, traces=None, layout=None, **kwargs):
+    def __init__(self, traces=None, layout=None, loop=None, **kwargs):
         super().__init__(**kwargs)
 
         # Traces
@@ -125,6 +126,9 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._layout_delta = {}
 
         # Process messagas
+        self._relayouts_complete = asyncio.Event(loop=None)
+        self._relayouts_complete.set()
+
         self._relayout_in_process = False
         self._waiting_relayout_callbacks = []
 
@@ -245,6 +249,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             relayout_msg_id = self._last_relayout_msg_id + 1
             self._last_relayout_msg_id = relayout_msg_id
             self._relayout_in_process = True
+            self._relayouts_complete.clear()
 
             self._py2js_deleteTraces = {'delete_inds': delete_inds,
                                         '_relayout_msg_id ': relayout_msg_id}
@@ -396,6 +401,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         style['_relayout_msg_id'] = relayout_msg_id
         self._last_relayout_msg_id = relayout_msg_id
         self._relayout_in_process = True
+        self._relayouts_complete.clear()
 
         restyle_msg_id = self._last_restyle_msg_id + 1
         style['_restyle_msg_id'] = restyle_msg_id
@@ -443,6 +449,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         relayout_msg_id = self._last_relayout_msg_id + 1
         self._last_relayout_msg_id = relayout_msg_id
         self._relayout_in_process = True
+        self._relayouts_complete.clear()
 
         restyle_msg_id = self._last_restyle_msg_id + 1
         self._last_restyle_msg_id = restyle_msg_id
@@ -501,7 +508,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             return
 
         msg_id = delta.get('_relayout_msg_id')
-        # print(f'layoutDelta: {msg_id} == {self._last_relayout_msg_id}')
+        print(f'layoutDelta: {msg_id} == {self._last_relayout_msg_id}')
         if msg_id == self._last_relayout_msg_id:
             # print('Processing layoutDelta')
             # print('layoutDelta: {deltas}'.format(deltas=delta))
@@ -517,6 +524,8 @@ class BaseFigureWidget(widgets.DOMWidget):
 
             self._dispatch_change_callbacks_relayout(delta_transform)
             self._relayout_in_process = False
+            self._relayouts_complete.set()
+            print('gets here at ' + datetime.datetime.now().strftime("%H:%M:%S"))
             while self._waiting_relayout_callbacks:
                 # Call callbacks
                 self._waiting_relayout_callbacks.pop()()

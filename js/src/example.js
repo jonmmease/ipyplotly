@@ -296,8 +296,12 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 var FigureView = widgets.DOMWidgetView.extend({
 
     render: function() {
-        var relayout_msg_id = this.model.get('_last_relayout_msg_id');
-        var restyle_msg_id = this.model.get('_last_restyle_msg_id');
+        // Update message ids
+        var relayout_msg_id = this.model.get('_last_relayout_msg_id') + 1;
+        this.model.set('_last_relayout_msg_id', relayout_msg_id);
+        var restyle_msg_id = this.model.get('_last_restyle_msg_id') + 1;
+        this.model.set('_last_restyle_msg_id', restyle_msg_id);
+        this.touch();
 
         // Initialize empty figure
         console.log('render');
