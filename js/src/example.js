@@ -148,7 +148,9 @@ var FigureModel = widgets.DOMWidgetModel.extend({
                 var lastKey = keyPath[keyPath.length-1];
                 var trace_v = v[i % v.length];
 
-                if (trace_v === null || trace_v === undefined){
+                if (trace_v === undefined) {
+                    // Nothing to do
+                } else if (trace_v === null){
                     if(valParent.hasOwnProperty(lastKey)) {
                         delete valParent[lastKey];
                     }
@@ -211,7 +213,9 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
             var lastKey = keyPath[keyPath.length-1];
 
-            if (v === null || v === undefined){
+            if (v === undefined) {
+                // Nothing to do
+            } else if (v === null){
                 if(valParent.hasOwnProperty(lastKey)) {
                     delete valParent[lastKey];
                 }
@@ -307,8 +311,74 @@ var FigureModel = widgets.DOMWidgetModel.extend({
             }
         }
     }
+}, {
+    serializers: _.extend({
+        _traces_data: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _layout_data: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _py2js_addTraces: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _py2js_deleteTraces: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _py2js_moveTraces: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _py2js_restyle: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _py2js_relayout: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _py2js_update: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _py2js_removeLayoutProps: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _py2js_removeStyleProps: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _js2py_restyle: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _js2py_relayout: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _js2py_update: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _js2py_layoutDelta: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _js2py_tracesDelta: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _js2py_pointsCallback: { deserialize: py2js_serializer, serialize: js2py_serializer},
+    }, widgets.DOMWidgetModel.serializers)
 });
 
+function js2py_serializer(x, widgetManager) {
+    var res;
+    console.log('js2py_serializer');
+    console.log(x);
+    if (Array.isArray(x)) {
+        res = new Array(x.length);
+        for (var i = 0; i < x.length; i++) {
+            res[i] = js2py_serializer(x[i]);
+        }
+    } else if (_.isPlainObject(x)) {
+        res = {};
+        for (var p in x) {
+            if (x.hasOwnProperty(p)) {
+                res[p] = js2py_serializer(x[p]);
+            }
+        }
+    } else if (x === undefined) {
+        res = '_undefined_';
+    } else {
+        res = x;
+    }
+    return res
+}
+
+function py2js_serializer(x, widgetManager) {
+    var res;
+    console.log('py2js_serializer')
+    console.log(x);
+    if (Array.isArray(x)) {
+        res = new Array(x.length);
+        for (var i = 0; i < x.length; i++) {
+            res[i] = py2js_serializer(x[i]);
+        }
+    } else if (_.isPlainObject(x)) {
+        res = {};
+        for (var p in x) {
+            if (x.hasOwnProperty(p)) {
+                res[p] = py2js_serializer(x[p]);
+            }
+        }
+    } else if (x === '_undefined_') {
+        res = undefined;
+    } else {
+        res = x;
+    }
+    return res
+}
 
 // Figure View
 // ===========
@@ -879,7 +949,6 @@ var FigureView = widgets.DOMWidgetView.extend({
         return res
     }
 });
-
 
 module.exports = {
     FigureView : FigureView,

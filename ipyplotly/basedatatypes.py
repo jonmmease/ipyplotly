@@ -3,11 +3,13 @@ import datetime
 import re
 import typing as typ
 import uuid
+from contextlib import contextmanager
 from copy import deepcopy
 from pprint import pprint
 
 import ipywidgets as widgets
-from traitlets import List, Unicode, Dict, default, observe, Integer, Bool
+from ipyplotly.serializers import custom_serializers
+from traitlets import List, Unicode, Dict, default, observe, Integer, Bool, Undefined
 
 from ipyplotly.callbacks import Points, BoxSelector, LassoSelector, InputState
 from ipyplotly.validators.layout import XaxisValidator, YaxisValidator, GeoValidator, TernaryValidator, SceneValidator
@@ -21,24 +23,6 @@ import os
 import pathlib
 
 # TODO:
-# Callbacks
-# ---------
-# - Add base class for traces
-# - Trace point callbacks
-#    - on_hover, on_unhover, on_click, on_select,
-#    - on_reconstrain for parcoords
-#
-# - Figure (or Layout) level callbacks
-#    - on_panzoom (pan/zoom)
-#    - on_doubleclick ()
-#    - on_plotly_afterplot
-#
-# - Property callbacks (every plotly datatype)
-#   - on_change('property', listener())
-#   Triggering these could be tricky for events that originate on JS side
-#
-
-
 
 @widgets.register
 class BaseFigureWidget(widgets.DOMWidget):
@@ -52,32 +36,32 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # Data properties for front end
     # Note: These are only automatically synced on full assignment, not on mutation
-    _layout_data = Dict().tag(sync=True)
-    _traces_data = List().tag(sync=True)
+    _layout_data = Dict().tag(sync=True, **custom_serializers)
+    _traces_data = List().tag(sync=True, **custom_serializers)
 
     # Python -> JS message properties
     _py2js_addTraces = List(trait=Dict(),
-                            allow_none=True).tag(sync=True)
+                            allow_none=True).tag(sync=True, **custom_serializers)
 
-    _py2js_restyle = List(allow_none=True).tag(sync=True)
-    _py2js_relayout = Dict(allow_none=True).tag(sync=True)
-    _py2js_update = List(allow_none=True).tag(sync=True)
+    _py2js_restyle = List(allow_none=True).tag(sync=True, **custom_serializers)
+    _py2js_relayout = Dict(allow_none=True).tag(sync=True, **custom_serializers)
+    _py2js_update = List(allow_none=True).tag(sync=True, **custom_serializers)
 
-    _py2js_deleteTraces = Dict(allow_none=True).tag(sync=True)
-    _py2js_moveTraces = List(allow_none=True).tag(sync=True)
+    _py2js_deleteTraces = Dict(allow_none=True).tag(sync=True, **custom_serializers)
+    _py2js_moveTraces = List(allow_none=True).tag(sync=True, **custom_serializers)
 
-    _py2js_removeLayoutProps = List(allow_none=True).tag(sync=True)
-    _py2js_removeStyleProps = List(allow_none=True).tag(sync=True)
+    _py2js_removeLayoutProps = List(allow_none=True).tag(sync=True, **custom_serializers)
+    _py2js_removeStyleProps = List(allow_none=True).tag(sync=True, **custom_serializers)
 
     # JS -> Python message properties
-    _js2py_styleDelta = List(allow_none=True).tag(sync=True)
-    _js2py_layoutDelta = Dict(allow_none=True).tag(sync=True)
-    _js2py_restyle = List(allow_none=True).tag(sync=True)
-    _js2py_relayout = Dict(allow_none=True).tag(sync=True)
-    _js2py_update = Dict(allow_none=True).tag(sync=True)
+    _js2py_styleDelta = List(allow_none=True).tag(sync=True, **custom_serializers)
+    _js2py_layoutDelta = Dict(allow_none=True).tag(sync=True, **custom_serializers)
+    _js2py_restyle = List(allow_none=True).tag(sync=True, **custom_serializers)
+    _js2py_relayout = Dict(allow_none=True).tag(sync=True, **custom_serializers)
+    _js2py_update = Dict(allow_none=True).tag(sync=True, **custom_serializers)
 
     # For plotly_select/hover/unhover/click
-    _js2py_pointsCallback = Dict(allow_none=True).tag(sync=True)
+    _js2py_pointsCallback = Dict(allow_none=True).tag(sync=True, **custom_serializers)
 
     # Message tracking
     _last_relayout_msg_id = Integer(0).tag(sync=True)
@@ -85,7 +69,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # Constructor
     # -----------
-    def __init__(self, traces=None, layout=None, loop=None, **kwargs):
+    def __init__(self, traces=None, layout=None, **kwargs):
         super().__init__(**kwargs)
 
         # Traces
@@ -130,7 +114,13 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._restyle_in_process = False
         self._waiting_restyle_callbacks = []
 
+        # View count
         self._view_count = 0
+
+        # Context manager support
+        self._in_batch_mode = False
+        self._batch_style_commands = {}  # type: typ.Dict[int, typ.Dict[str, typ.Any]]
+        self._batch_layout_commands = {}  # type: typ.Dict[str, typ.Any]
 
     # ### Trait methods ###
     @observe('_js2py_styleDelta')
@@ -323,7 +313,10 @@ class BaseFigureWidget(widgets.DOMWidget):
 
                     restyle_msg_vs.append(trace_v)
 
-                    if trace_v is None:
+                    if trace_v == Undefined:
+                        # Do nothing
+                        pass
+                    elif trace_v is None:
                         if isinstance(val_parent, dict) and last_key in val_parent:
                             val_parent.pop(last_key)
                             any_vals_changed = True
@@ -410,12 +403,17 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     def _restyle_child(self, child, prop, val):
 
-        send_val = [val]
         trace_index = self.traces.index(child)
-        restyle = {prop: send_val}
 
-        self._dispatch_change_callbacks_restyle(restyle, trace_index)
-        self._send_restyle_msg(restyle, trace_indexes=trace_index)
+        if not self._in_batch_mode:
+            send_val = [val]
+            restyle = {prop: send_val}
+            self._dispatch_change_callbacks_restyle(restyle, trace_index)
+            self._send_restyle_msg(restyle, trace_indexes=trace_index)
+        else:
+            if trace_index not in self._batch_style_commands:
+                self._batch_style_commands[trace_index] = {}
+            self._batch_style_commands[trace_index][prop] = val
 
     def add_traces(self, traces: typ.List['BaseTraceHierarchyType']):
 
@@ -546,10 +544,13 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     def _relayout_child(self, child, prop, val):
         send_val = val  # Don't wrap in a list for relayout
-        relayout_msg = {prop: send_val}
 
-        self._dispatch_change_callbacks_relayout(relayout_msg)
-        self._send_relayout_msg(relayout_msg)
+        if not self._in_batch_mode:
+            relayout_msg = {prop: send_val}
+            self._dispatch_change_callbacks_relayout(relayout_msg)
+            self._send_relayout_msg(relayout_msg)
+        else:
+            self._batch_layout_commands[prop] = send_val
 
     def _send_relayout_msg(self, layout):
         # print('Relayout (Py->JS): {layout}'.format(layout=layout))
@@ -613,7 +614,10 @@ class BaseFigureWidget(widgets.DOMWidget):
             last_key = key_path[-1]
             # print(f'{val_parent}, {key_path}, {last_key}, {v}')
 
-            if v is None:
+            if v is Undefined:
+                # Do nothing
+                pass
+            elif v is None:
                 if isinstance(val_parent, dict) and last_key in val_parent:
                     val_parent.pop(last_key)
                     relayout_msg[raw_key] = None
@@ -812,6 +816,49 @@ class BaseFigureWidget(widgets.DOMWidget):
             self._waiting_restyle_callbacks.append(fn)
         else:
             fn()
+
+    # Context managers
+    # ----------------
+    @contextmanager
+    def batch_update(self):
+        """Hold syncing any state until the outermost context manager exits"""
+        if self._in_batch_mode is True:
+            yield
+        else:
+            try:
+                self._in_batch_mode = True
+                yield
+            finally:
+                self._in_batch_mode = False
+                self._send_batch_update()
+
+    def _send_batch_update(self):
+
+        # Handle Style / Trace Indexes
+        # ----------------------------
+        batch_style_commands = self._batch_style_commands
+        trace_indexes = sorted(set([trace_ind for trace_ind in batch_style_commands]))
+
+        all_props = sorted(set([prop
+                                for trace_style in self._batch_style_commands.values()
+                                for prop in trace_style]))
+
+        # Initialize style dict with all values undefined
+        style = {prop: [Undefined for _ in range(len(trace_indexes))]
+                 for prop in all_props}
+
+        # Fill in values
+        for trace_ind, trace_style in batch_style_commands.items():
+            for trace_prop, trace_val in trace_style.items():
+                style[trace_prop][trace_ind] = trace_val
+
+        # Handle Layout
+        # -------------
+        layout = self._batch_layout_commands
+
+        self.update(style=style, layout=layout, trace_indexes=trace_indexes)
+        self._batch_layout_commands.clear()
+        self._batch_style_commands.clear()
 
     # Exports
     # -------
@@ -1136,22 +1183,36 @@ class BasePlotlyType:
                 # TODO: Only None if this is a valid path. ValueError otherwise
                 return None
 
+    @property
+    def _in_batch_mode(self):
+        return self.parent and self.parent._in_batch_mode
+
     def _set_prop(self, prop, val):
+        if val is Undefined:
+            # Do nothing
+            return
+
         validator = self._validators.get(prop)
         val = validator.validate_coerce(val)
 
         if val is None:
             # Check if we should send null update
             if self._data and prop in self._data:
-                self._data.pop(prop)
+                if not self._in_batch_mode:
+                    self._data.pop(prop)
                 self._send_update(prop, val)
         else:
             self._init_data()
             if prop not in self._data or self._data[prop] != val:
-                self._data[prop] = val
+                if not self._in_batch_mode:
+                    self._data[prop] = val
                 self._send_update(prop, val)
 
     def _set_compound_prop(self, prop, val):
+        if val is Undefined:
+            # Do nothing
+            return
+
         # Validate coerce new value
         validator = self._validators.get(prop)
         val = validator.validate_coerce(val)  # type: BasePlotlyType
@@ -1169,11 +1230,12 @@ class BasePlotlyType:
             new_dict_val = None
 
         # Update data dict
-        if not new_dict_val:
-            if prop in self._data:
-                self._data.pop(prop)
-        else:
-            self._data[prop] = new_dict_val
+        if not self._in_batch_mode:
+            if not new_dict_val:
+                if prop in self._data:
+                    self._data.pop(prop)
+            else:
+                self._data[prop] = new_dict_val
 
         # Send update if there was a change in value
         if curr_dict_val != new_dict_val:
@@ -1193,6 +1255,10 @@ class BasePlotlyType:
         return val
 
     def _set_array_prop(self, prop, val):
+        if val is Undefined:
+            # Do nothing
+            return
+
         # Validate coerce new value
         validator = self._validators.get(prop)
         val = validator.validate_coerce(val)  # type: tuple
@@ -1210,11 +1276,12 @@ class BasePlotlyType:
             new_dict_vals = None
 
         # Update data dict
-        if not new_dict_vals:
-            if prop in self._data:
-                self._data.pop(prop)
-        else:
-            self._data[prop] = new_dict_vals
+        if not self._in_batch_mode:
+            if not new_dict_vals:
+                if prop in self._data:
+                    self._data.pop(prop)
+            else:
+                self._data[prop] = new_dict_vals
 
         # Send update if there was a change in value
         if curr_dict_vals != new_dict_vals:
