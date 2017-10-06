@@ -198,8 +198,8 @@ class NumberValidator(BaseValidator):
     def __init__(self, name, parent_name, dflt=None, min=None, max=None, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
-        self.min_val = min
-        self.max_val = max
+        self.min_val = min if min is not None else -np.inf
+        self.max_val = max if max is not None else np.inf
         self.array_ok = array_ok
 
     def validate_coerce(self, v):
@@ -944,4 +944,3 @@ class BaseTracesValidator:
                               "Received value of type {typ}").format(typ=type(v)))
 
         return v
-

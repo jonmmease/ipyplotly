@@ -8,6 +8,8 @@ from copy import deepcopy
 from pprint import pprint
 
 import ipywidgets as widgets
+
+from ipyplotly import animation
 from ipyplotly.serializers import custom_serializers
 from traitlets import List, Unicode, Dict, default, observe, Integer, Bool, Undefined
 
@@ -122,6 +124,8 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._in_batch_mode = False
         self._batch_style_commands = {}  # type: typ.Dict[int, typ.Dict[str, typ.Any]]
         self._batch_layout_commands = {}  # type: typ.Dict[str, typ.Any]
+        self._animation_duration_validator = animation.DurationValidator()
+        self._animation_easing_validator = animation.EasingValidator()
 
     # ### Trait methods ###
     @observe('_js2py_styleDelta')
@@ -417,6 +421,11 @@ class BaseFigureWidget(widgets.DOMWidget):
             self._batch_style_commands[trace_index][prop] = val
 
     def add_traces(self, traces: typ.List['BaseTraceHierarchyType']):
+
+        if self._in_batch_mode:
+            self._batch_layout_commands.clear()
+            self._batch_style_commands.clear()
+            raise ValueError('Traces may not be added in a batch context')
 
         if not isinstance(traces, (list, tuple)):
             traces = [traces]
@@ -874,7 +883,61 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._batch_style_commands.clear()
 
     @contextmanager
-    def batch_animate(self, animation_opts=Undefined):
+    def batch_animate(self, duration=500, easing="cubic-in-out"):
+        """
+        Context manager to animate trace / layout updates
+
+        Parameters
+        ----------
+        duration : number
+            The duration of the transition, in milliseconds. If equal to zero, updates are synchronous.
+        easing : string
+            The easing function used for the transition.
+            One of:
+                - linear
+                - quad
+                - cubic
+                - sin
+                - exp
+                - circle
+                - elastic
+                - back
+                - bounce
+                - linear-in
+                - quad-in
+                - cubic-in
+                - sin-in
+                - exp-in
+                - circle-in
+                - elastic-in
+                - back-in
+                - bounce-in
+                - linear-out
+                - quad-out
+                - cubic-out
+                - sin-out
+                - exp-out
+                - circle-out
+                - elastic-out
+                - back-out
+                - bounce-out
+                - linear-in-out
+                - quad-in-out
+                - cubic-in-out
+                - sin-in-out
+                - exp-in-out
+                - circle-in-out
+                - elastic-in-out
+                - back-in-out
+                - bounce-in-ou
+
+        Returns
+        -------
+            None
+        """
+        duration = self._animation_duration_validator.validate_coerce(duration)
+        easing = self._animation_easing_validator.validate_coerce(easing)
+
         if self._in_batch_mode is True:
             yield
         else:
@@ -883,7 +946,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                 yield
             finally:
                 self._in_batch_mode = False
-                self._send_batch_animate(animation_opts)
+                self._send_batch_animate({'transition': {'duration': duration, 'easing': easing}})
 
     def _send_batch_animate(self, animation_opts):
 
@@ -920,7 +983,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._batch_style_commands.clear()
 
     def _send_animate_msg(self, styles, layout, trace_indexes, animation_opts):
-        print(styles, layout, trace_indexes, animation_opts)
+        # print(styles, layout, trace_indexes, animation_opts)
         if not isinstance(trace_indexes, (list, tuple)):
             trace_indexes = [trace_indexes]
 
@@ -943,8 +1006,8 @@ class BaseFigureWidget(widgets.DOMWidget):
                         'traces': trace_indexes},
                        animation_opts]
 
-        print('Animate (Py->JS)')
-        pprint(animate_msg)
+        # print('Animate (Py->JS)')
+        # pprint(animate_msg)
 
         self._py2js_animate = animate_msg
         self._py2js_animate = None
