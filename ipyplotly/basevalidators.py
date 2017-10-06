@@ -1,8 +1,11 @@
+import base64
 import numbers
 import collections
+import pathlib
 import textwrap
 import uuid
 
+import io
 import numpy as np
 import re
 # Notes: These become base validator classes, one for each value type. The code-gen validators for primitive types
@@ -19,6 +22,7 @@ import re
 # I code gen the figure subclass that has all of the add_scatter, add_bar, etc. methods.
 #
 # I think that's all of the code gen tasks. Validators, Data Classes, and Figure methods
+from PIL import Image
 
 class _NoDefault(object):
     def __repr__(self):
@@ -837,6 +841,36 @@ class InfoArrayValidator(BaseValidator):
                 # Validate coerce elements
                 v[i] = validator.validate_coerce(el)
 
+        return v
+
+
+class ImageUriValidator(BaseValidator):
+    def __init__(self, name, parent_name):
+        super().__init__(name=name, parent_name=parent_name)
+
+    def validate_coerce(self, v):
+        if v is None:
+            pass
+        elif isinstance(v, str):
+            # Future possibilities:
+            #   - Detect filesystem system paths and convert to URI
+            #   - Validate either url or data uri
+            pass
+        elif isinstance(v, Image.Image):
+            # Convert PIL image to png data uri string
+            in_mem_file = io.BytesIO()
+            v.save(in_mem_file, format="PNG")
+            in_mem_file.seek(0)
+            img_bytes = in_mem_file.read()
+            base64_encoded_result_bytes = base64.b64encode(img_bytes)
+            base64_encoded_result_str = base64_encoded_result_bytes.decode('ascii')
+            v = f'data:image/png;base64,{base64_encoded_result_str}'
+        else:
+            raise ValueError(("The {name} property of {parent_name} must be a string or a PIL.image \n"
+                              "    Received value of type {typ}: {v}").format(name=self.name,
+                                                                              parent_name=self.parent_name,
+                                                                              typ=type(v),
+                                                                              v=v))
         return v
 
 

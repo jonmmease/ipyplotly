@@ -172,4 +172,4 @@ setup_args = {
     ],
 }
 
-setup(**setup_args)
+setup(**setup_args, install_requires=['Pillow'])

@@ -5,6 +5,8 @@ from io import StringIO
 from codegen.utils import format_source, PlotlyNode, TraceNode
 import textwrap
 
+custom_validator_datatypes = {'layout.image.source': 'ImageUri'}
+
 def build_validators_py(parent_node: PlotlyNode):
     datatype_nodes = parent_node.child_datatypes
     if not datatype_nodes:
@@ -20,9 +22,13 @@ def build_validators_py(parent_node: PlotlyNode):
     # -----------------------
     for datatype_node in datatype_nodes:
 
+        if datatype_node.dir_str in custom_validator_datatypes:
+            validator_base = f"bv.{custom_validator_datatypes[datatype_node.dir_str]}Validator"
+        else:
+            validator_base = f"bv.{datatype_node.datatype_pascal_case}Validator"
         buffer.write(f"""
         
-class {datatype_node.name_validator}(bv.{datatype_node.datatype_pascal_case}Validator):
+class {datatype_node.name_validator}({validator_base}):
     def __init__(self, prop_name='{datatype_node.name_property}'):""")
 
         # Add import
