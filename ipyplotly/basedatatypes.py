@@ -723,7 +723,8 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         relayout_msg = self._perform_relayout_dict(layout)
         restyle_msg = self._perform_restyle_dict(style, trace_indexes)
-
+        # print(style, trace_indexes, restyle_msg)
+        # pprint(self._traces_data)
         return restyle_msg, relayout_msg, trace_indexes
 
 

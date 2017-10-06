@@ -256,6 +256,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         console.log('FigureModel: do_animate');
         var data = this.get('_py2js_animate');
         if (data !== null) {
+            console.log(data);
             var animationData = data[0];
 
             var styles = animationData['data'];
@@ -410,42 +411,11 @@ function py2js_serializer(x, widgetManager) {
 var FigureView = widgets.DOMWidgetView.extend({
 
     render: function() {
-        // Update message ids
-        var relayout_msg_id = this.model.get('_last_relayout_msg_id') + 1;
-        this.model.set('_last_relayout_msg_id', relayout_msg_id);
-        var restyle_msg_id = this.model.get('_last_restyle_msg_id') + 1;
-        this.model.set('_last_restyle_msg_id', restyle_msg_id);
-        this.touch();
 
-        // Initialize empty figure
-        console.log('render');
-        console.log(this.model.get('_traces_data'));
-        console.log(this.model.get('_layout_data'));
+        var that = this;
 
-        // Clone traces and layout so plotly instances in the views don't mutate the model
-        var initial_traces = JSON.parse(JSON.stringify(this.model.get('_traces_data')));
-        var initial_layout = JSON.parse(JSON.stringify(this.model.get('_layout_data')));
-        Plotly.plot(this.el, initial_traces, initial_layout);
-
-        // Update layout
-        var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
-        relayoutDelta['_relayout_msg_id'] = relayout_msg_id;
-        this.model.set('_js2py_layoutDelta', relayoutDelta);
-
-        // Update traces
-        // Loop over new traces
-        var traceDeltas = new Array(initial_traces.length);
-        var fullData = this.getFullData();
-        for(var i=0; i < initial_traces.length; i++) {
-            var fullTraceData = fullData[i];
-            var traceData = initial_traces[i];
-            traceDeltas[i] = this.create_delta_object(traceData, fullTraceData);
-            traceDeltas[i]['_restyle_msg_id'] = restyle_msg_id;
-        }
-
-        console.log(traceDeltas);
-        this.model.set('_js2py_styleDelta', traceDeltas);
-
+        // Wire up property callbacks
+        // --------------------------
         // Python -> JS event properties
         this.model.on('change:_py2js_addTraces', this.do_addTraces, this);
         this.model.on('change:_py2js_deleteTraces', this.do_deleteTraces, this);
@@ -455,26 +425,60 @@ var FigureView = widgets.DOMWidgetView.extend({
         this.model.on("change:_py2js_update", this.do_update, this);
         this.model.on("change:_py2js_animate", this.do_animate, this);
 
-        this.model.on('change:_traces_data', function () {
-            console.log('change:_traces_data');
-            console.log(this.model.get('_traces_data'));
-        }, this);
-
-        // Plotly events
-        var that = this;
-        this.el.on('plotly_restyle', function(update) {that.handle_plotly_restyle(update)});
-        this.el.on('plotly_relayout', function(update) {that.handle_plotly_relayout(update)});
-        this.el.on('plotly_update', function(update) {that.handle_plotly_update(update)});
-
-        this.el.on('plotly_click', function(update) {that.handle_plotly_click(update)});
-        this.el.on('plotly_hover', function(update) {that.handle_plotly_hover(update)});
-        this.el.on('plotly_unhover', function(update) {that.handle_plotly_unhover(update)});
-        this.el.on('plotly_selected', function(update) {that.handle_plotly_selected(update)});
-        this.el.on('plotly_doubleclick', function(update) {that.handle_plotly_doubleclick(update)});
-        this.el.on('plotly_afterplot', function(update) {that.handle_plotly_afterplot(update)});
-
-        // sync any/all changes back to model
+        // Increment message ids
+        // ---------------------
+        var relayout_msg_id = this.model.get('_last_relayout_msg_id') + 1;
+        this.model.set('_last_relayout_msg_id', relayout_msg_id);
+        var restyle_msg_id = this.model.get('_last_restyle_msg_id') + 1;
+        this.model.set('_last_restyle_msg_id', restyle_msg_id);
         this.touch();
+
+        // Initialize figure
+        // -----------------
+        console.log('render');
+        console.log(this.model.get('_traces_data'));
+        console.log(this.model.get('_layout_data'));
+
+        // Clone traces and layout so plotly instances in the views don't mutate the model
+        var initial_traces = JSON.parse(JSON.stringify(this.model.get('_traces_data')));
+        var initial_layout = JSON.parse(JSON.stringify(this.model.get('_layout_data')));
+
+        Plotly.plot(this.el, initial_traces, initial_layout).then(function () {
+
+            // Update layout
+            var relayoutDelta = that.create_delta_object(that.model.get('_layout_data'), that.getFullLayout());
+            relayoutDelta['_relayout_msg_id'] = relayout_msg_id;
+            that.model.set('_js2py_layoutDelta', relayoutDelta);
+
+            // Update traces
+            // Loop over new traces
+            var traceDeltas = new Array(initial_traces.length);
+            var fullData = that.getFullData();
+            for(var i=0; i < initial_traces.length; i++) {
+                var fullTraceData = fullData[i];
+                var traceData = initial_traces[i];
+                traceDeltas[i] = that.create_delta_object(traceData, fullTraceData);
+                traceDeltas[i]['_restyle_msg_id'] = restyle_msg_id;
+            }
+
+            console.log(traceDeltas);
+            that.model.set('_js2py_styleDelta', traceDeltas);
+
+            // sync any/all changes back to model
+            that.touch();
+
+            // Wire up plotly event callbacks
+            that.el.on('plotly_restyle', function(update) {that.handle_plotly_restyle(update)});
+            that.el.on('plotly_relayout', function(update) {that.handle_plotly_relayout(update)});
+            that.el.on('plotly_update', function(update) {that.handle_plotly_update(update)});
+
+            that.el.on('plotly_click', function(update) {that.handle_plotly_click(update)});
+            that.el.on('plotly_hover', function(update) {that.handle_plotly_hover(update)});
+            that.el.on('plotly_unhover', function(update) {that.handle_plotly_unhover(update)});
+            that.el.on('plotly_selected', function(update) {that.handle_plotly_selected(update)});
+            that.el.on('plotly_doubleclick', function(update) {that.handle_plotly_doubleclick(update)});
+            that.el.on('plotly_afterplot', function(update) {that.handle_plotly_afterplot(update)});
+        });
     },
 
     getFullData: function () {
@@ -740,33 +744,35 @@ var FigureView = widgets.DOMWidgetView.extend({
         if (data !== null) {
             console.log(data);
             var prev_num_traces = this.el.data.length;
+
             // console.log(data);
-            Plotly.addTraces(this.el, data);
+            var that = this;
+            Plotly.addTraces(this.el, data).then(function () {
+                // Loop over new traces
+                var traceDeltas = new Array(data.length);
+                var tracesData = that.model.get('_traces_data');
+                var fullData = that.getFullData();
+                var restyle_msg_id = data[0]['_restyle_msg_id'];
+                var relayout_msg_id = data[0]['_relayout_msg_id'];
+                console.log('relayout_msg_id: ' + relayout_msg_id);
+                for(var i=0; i < data.length; i++) {
+                    var fullTraceData = fullData[i + prev_num_traces];
+                    var traceData = tracesData[i + prev_num_traces];
+                    traceDeltas[i] = that.create_delta_object(traceData, fullTraceData);
+                    traceDeltas[i]['_restyle_msg_id'] = restyle_msg_id;
+                }
 
-            // Loop over new traces
-            var traceDeltas = new Array(data.length);
-            var tracesData = this.model.get('_traces_data');
-            var fullData = this.getFullData();
-            var restyle_msg_id = data[0]['_restyle_msg_id'];
-            var relayout_msg_id = data[0]['_relayout_msg_id'];
-            console.log('relayout_msg_id: ' + relayout_msg_id);
-            for(var i=0; i < data.length; i++) {
-                var fullTraceData = fullData[i + prev_num_traces];
-                var traceData = tracesData[i + prev_num_traces];
-                traceDeltas[i] = this.create_delta_object(traceData, fullTraceData);
-                traceDeltas[i]['_restyle_msg_id'] = restyle_msg_id;
-            }
-
-            this.model.set('_js2py_styleDelta', traceDeltas);
+                that.model.set('_js2py_styleDelta', traceDeltas);
 
 
-            // Update layout
-            var layoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
-            layoutDelta['_relayout_msg_id'] = relayout_msg_id;
-            this.model.set('_js2py_layoutDelta', layoutDelta);
-            console.log(layoutDelta);
+                // Update layout
+                var layoutDelta = that.create_delta_object(that.model.get('_layout_data'), that.getFullLayout());
+                layoutDelta['_relayout_msg_id'] = relayout_msg_id;
+                that.model.set('_js2py_layoutDelta', layoutDelta);
+                console.log(layoutDelta);
 
-            this.touch();
+                that.touch();
+            });
         }
     },
 
@@ -778,13 +784,14 @@ var FigureView = widgets.DOMWidgetView.extend({
             var relayout_msg_id = data['_relayout_msg_id'];
 
             console.log(delete_inds);
-            Plotly.deleteTraces(this.el, delete_inds);
-
-            // Send back layout delta
-            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
-            relayoutDelta['_relayout_msg_id'] = relayout_msg_id;
-            this.model.set('_js2py_layoutDelta', relayoutDelta);
-            this.touch();
+            var that = this;
+            Plotly.deleteTraces(this.el, delete_inds).then(function () {
+                // Send back layout delta
+                var relayoutDelta = that.create_delta_object(that.model.get('_layout_data'), that.getFullLayout());
+                relayoutDelta['_relayout_msg_id'] = relayout_msg_id;
+                that.model.set('_js2py_layoutDelta', relayoutDelta);
+                that.touch();
+            });
         }
     },
 
@@ -801,7 +808,7 @@ var FigureView = widgets.DOMWidgetView.extend({
 
             if (!inds_equal) {
                 console.log(current_inds + "->" + new_inds);
-                Plotly.moveTraces(this.el, current_inds, new_inds);
+                Plotly.moveTraces(this.el, current_inds, new_inds)
             }
         }
     },
@@ -910,27 +917,28 @@ var FigureView = widgets.DOMWidgetView.extend({
             var trace_indexes = this.model.normalize_trace_indexes(animationData['traces']);
 
             animationData['_doNotReportToPy'] = true;
-            Plotly.animate(this.el, animationData, animationOpts);
+            var that = this;
+            Plotly.animate(this.el, animationData, animationOpts).then(function () {
+                // Send back style delta
+                var traceDeltas = new Array(trace_indexes.length);
+                var trace_data = that.model.get('_traces_data');
+                var fullData = that.getFullData();
+                for (var i = 0; i < trace_indexes.length; i++) {
+                    var restyle_msg_id = styles[i]['_restyle_msg_id'];
+                    traceDeltas[i] = that.create_delta_object(trace_data[trace_indexes[i]], fullData[trace_indexes[i]]);
+                    traceDeltas[i]['_restyle_msg_id'] = restyle_msg_id;
+                }
 
-            // Send back style delta
-            var traceDeltas = new Array(trace_indexes.length);
-            var trace_data = this.model.get('_traces_data');
-            var fullData = this.getFullData();
-            for (var i = 0; i < trace_indexes.length; i++) {
-                var restyle_msg_id = styles[i]['_restyle_msg_id'];
-                traceDeltas[i] = this.create_delta_object(trace_data[trace_indexes[i]], fullData[trace_indexes[i]]);
-                traceDeltas[i]['_restyle_msg_id'] = restyle_msg_id;
-            }
+                that.model.set('_js2py_styleDelta', traceDeltas);
 
-            this.model.set('_js2py_styleDelta', traceDeltas);
+                // Send back layout delta
+                var relayout_msg_id = layout['_relayout_msg_id'];
+                var relayoutDelta = that.create_delta_object(that.model.get('_layout_data'), that.getFullLayout());
+                relayoutDelta['_relayout_msg_id'] = relayout_msg_id;
+                that.model.set('_js2py_layoutDelta', relayoutDelta);
 
-            // Send back layout delta
-            var relayout_msg_id = layout['_relayout_msg_id'];
-            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
-            relayoutDelta['_relayout_msg_id'] = relayout_msg_id;
-            this.model.set('_js2py_layoutDelta', relayoutDelta);
-
-            this.touch();
+                that.touch();
+            });
         }
     },
 
