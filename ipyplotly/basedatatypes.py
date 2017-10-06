@@ -869,7 +869,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         # Fill in values
         for trace_ind, trace_style in batch_style_commands.items():
             for trace_prop, trace_val in trace_style.items():
-                style[trace_prop][trace_ind] = trace_val
+                style[trace_prop][trace_indexes.index(trace_ind)] = trace_val
 
         # Handle Layout
         # -------------
