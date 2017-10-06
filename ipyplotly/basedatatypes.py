@@ -46,6 +46,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     _py2js_restyle = List(allow_none=True).tag(sync=True, **custom_serializers)
     _py2js_relayout = Dict(allow_none=True).tag(sync=True, **custom_serializers)
     _py2js_update = List(allow_none=True).tag(sync=True, **custom_serializers)
+    _py2js_animate = List(allow_none=True).tag(sync=True, **custom_serializers)
 
     _py2js_deleteTraces = Dict(allow_none=True).tag(sync=True, **custom_serializers)
     _py2js_moveTraces = List(allow_none=True).tag(sync=True, **custom_serializers)
@@ -263,12 +264,12 @@ class BaseFigureWidget(widgets.DOMWidget):
         if not isinstance(trace_indexes, (list, tuple)):
             trace_indexes = [trace_indexes]
 
-        restyle_msg = self._perform_restyle(style, trace_indexes)
+        restyle_msg = self._perform_restyle_dict(style, trace_indexes)
         if restyle_msg:
             self._dispatch_change_callbacks_restyle(restyle_msg, trace_indexes)
             self._send_restyle_msg(restyle_msg, trace_indexes=trace_indexes)
 
-    def _perform_restyle(self, style, trace_indexes):
+    def _perform_restyle_dict(self, style, trace_indexes):
         # Make sure trace_indexes is an array
         if not isinstance(trace_indexes, list):
             trace_indexes = [trace_indexes]
@@ -579,13 +580,13 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     def relayout(self, layout):
         # print(f'Relayout: {layout}')
-        relayout_msg = self._perform_relayout(layout)
+        relayout_msg = self._perform_relayout_dict(layout)
         if relayout_msg:
 
             self._dispatch_change_callbacks_relayout(relayout_msg)
             self._send_relayout_msg(relayout_msg)
 
-    def _perform_relayout(self, relayout_data):
+    def _perform_relayout_dict(self, relayout_data):
         relayout_msg = {}  # relayout data to send to JS side as Plotly.relayout()
 
         # Update layout_data
@@ -679,9 +680,25 @@ class BaseFigureWidget(widgets.DOMWidget):
     # Update
     # ------
     def update(self, style=None, layout=None, trace_indexes=None):
+
+        restyle_msg, relayout_msg, trace_indexes = self._perform_update_dict(style=style,
+                                                                             layout=layout,
+                                                                             trace_indexes=trace_indexes)
+        # Perform restyle portion of update
+        if restyle_msg:
+            self._dispatch_change_callbacks_restyle(restyle_msg, trace_indexes)
+
+        # Perform relayout portion of update
+        if relayout_msg:
+            self._dispatch_change_callbacks_relayout(relayout_msg)
+
+        if restyle_msg or relayout_msg:
+            self._send_update_msg(restyle_msg, relayout_msg, trace_indexes)
+
+    def _perform_update_dict(self, style=None, layout=None, trace_indexes=None):
         if not style and not layout:
             # Nothing to do
-            return
+            return None, None, None
 
         if style is None:
             style = {}
@@ -695,18 +712,11 @@ class BaseFigureWidget(widgets.DOMWidget):
         if not isinstance(trace_indexes, (list, tuple)):
             trace_indexes = [trace_indexes]
 
-        # Perform restyle portion of update
-        restyle_msg = self._perform_restyle(style, trace_indexes)
-        if restyle_msg:
-            self._dispatch_change_callbacks_restyle(restyle_msg, trace_indexes)
+        relayout_msg = self._perform_relayout_dict(layout)
+        restyle_msg = self._perform_restyle_dict(style, trace_indexes)
 
-        # Perform relayout portion of update
-        relayout_msg = self._perform_relayout(layout)
-        if relayout_msg:
-            self._dispatch_change_callbacks_relayout(relayout_msg)
+        return restyle_msg, relayout_msg, trace_indexes
 
-        if restyle_msg or relayout_msg:
-            self._send_update_msg(restyle_msg, relayout_msg, trace_indexes)
 
     def _send_update_msg(self, style, layout, trace_indexes=None):
         if not isinstance(trace_indexes, (list, tuple)):
@@ -832,8 +842,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                 self._in_batch_mode = False
                 self._send_batch_update()
 
-    def _send_batch_update(self):
-
+    def _build_update_params_from_batch(self):
         # Handle Style / Trace Indexes
         # ----------------------------
         batch_style_commands = self._batch_style_commands
@@ -856,9 +865,89 @@ class BaseFigureWidget(widgets.DOMWidget):
         # -------------
         layout = self._batch_layout_commands
 
+        return style, layout, trace_indexes
+
+    def _send_batch_update(self):
+        style, layout, trace_indexes = self._build_update_params_from_batch()
         self.update(style=style, layout=layout, trace_indexes=trace_indexes)
         self._batch_layout_commands.clear()
         self._batch_style_commands.clear()
+
+    @contextmanager
+    def batch_animate(self, animation_opts=Undefined):
+        if self._in_batch_mode is True:
+            yield
+        else:
+            try:
+                self._in_batch_mode = True
+                yield
+            finally:
+                self._in_batch_mode = False
+                self._send_batch_animate(animation_opts)
+
+    def _send_batch_animate(self, animation_opts):
+
+        # Apply commands to internal dictionaries as an update
+        # ----------------------------------------------------
+        style, layout, trace_indexes = self._build_update_params_from_batch()
+        restyle_msg, relayout_msg, trace_indexes = self._perform_update_dict(style, layout, trace_indexes)
+
+        # ### Perform restyle portion of animate ###
+        if restyle_msg:
+            self._dispatch_change_callbacks_restyle(restyle_msg, trace_indexes)
+
+        # ### Perform relayout portion of update ###
+        if relayout_msg:
+            self._dispatch_change_callbacks_relayout(relayout_msg)
+
+        # Convert style / trace_indexes into animate form
+        # -----------------------------------------------
+        if self._batch_style_commands:
+            animate_styles, animate_trace_indexes = zip(*[
+                (trace_style, trace_index) for trace_index, trace_style in self._batch_style_commands.items()])
+        else:
+            animate_styles, animate_trace_indexes = {}, []
+
+        animate_layout = self._batch_layout_commands
+
+        # Send animate message to JS
+        # --------------------------
+        self._send_animate_msg(list(animate_styles), animate_layout, list(animate_trace_indexes), animation_opts)
+
+        # Clear batched commands
+        # ----------------------
+        self._batch_layout_commands.clear()
+        self._batch_style_commands.clear()
+
+    def _send_animate_msg(self, styles, layout, trace_indexes, animation_opts):
+        print(styles, layout, trace_indexes, animation_opts)
+        if not isinstance(trace_indexes, (list, tuple)):
+            trace_indexes = [trace_indexes]
+
+        # Add restyle message id
+        restyle_msg_id = self._last_restyle_msg_id + 1
+        for style in styles:
+            style['_restyle_msg_id'] = restyle_msg_id
+
+        self._last_restyle_msg_id = restyle_msg_id
+        self._restyle_in_process = True
+
+        # Add relayout message id
+        relayout_msg_id = self._last_relayout_msg_id + 1
+        layout['_relayout_msg_id'] = relayout_msg_id
+        self._last_relayout_msg_id = relayout_msg_id
+        self._relayout_in_process = True
+
+        animate_msg = [{'data': styles,
+                        'layout': layout,
+                        'traces': trace_indexes},
+                       animation_opts]
+
+        print('Animate (Py->JS)')
+        pprint(animate_msg)
+
+        self._py2js_animate = animate_msg
+        self._py2js_animate = None
 
     # Exports
     # -------
