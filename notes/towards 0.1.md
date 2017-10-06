@@ -6,8 +6,6 @@ Some notes on the things that should happen in preparation for a public 0.1 rele
 ## Features
 
 ### Misc
-- Auto conversion of PIL images png strings
-
 - Append valid type description to property doc strings (e.g. valid colors, min/max, etc.). This is what you get when
  you call fig.layout.xaxis.range? from the notebook
 
