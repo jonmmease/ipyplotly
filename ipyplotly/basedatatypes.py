@@ -144,8 +144,8 @@ class BaseFigureWidget(widgets.DOMWidget):
 
                 # Remove message id
                 # pprint(delta)
-
                 # print('Processing styleDelta')
+
                 trace_uids = [trace.uid for trace in self.traces]
                 trace_index = trace_uids.index(trace_uid)
                 uid_trace = self.traces[trace_index]
@@ -231,14 +231,20 @@ class BaseFigureWidget(widgets.DOMWidget):
         # Compute trace data list after removal
         traces_data_post_removal = [t for t in self._traces_data]
         traces_deltas_post_removal = [t for t in self._traces_deltas]
+        orig_uids_post_removal = [trace_data['uid'] for trace_data in self._traces_data]
+
         for i in reversed(delete_inds):
             del traces_data_post_removal[i]
             del traces_deltas_post_removal[i]
+            del orig_uids_post_removal[i]
 
         if delete_inds:
             relayout_msg_id = self._last_relayout_msg_id + 1
             self._last_relayout_msg_id = relayout_msg_id
             self._relayout_in_process = True
+
+            for di in reversed(delete_inds):
+                del self._traces_data[di]  # Modify in-place so we don't trigger serialization
 
             self._py2js_deleteTraces = {'delete_inds': delete_inds,
                                         '_relayout_msg_id ': relayout_msg_id}
@@ -247,19 +253,38 @@ class BaseFigureWidget(widgets.DOMWidget):
         # Compute move traces
         new_inds = []
 
-        for uid in [t['uid'] for t in traces_data_post_removal]:
+        for uid in orig_uids_post_removal:
             new_inds.append(new_uids.index(uid))
 
         current_inds = list(range(len(traces_data_post_removal)))
 
         if not all([i1 == i2 for i1, i2 in zip(new_inds, current_inds)]):
             self._py2js_moveTraces = [current_inds, new_inds]
+            self._py2js_moveTraces = None
+
+            # ### Reorder trace elements ###
+            # We do so in-place so we don't trigger serialization
+            # pprint(self._traces_data)
+
+            # #### Remove by curr_inds in reverse order ####
+            moving_traces_data = []
+            for ci in reversed(current_inds):
+                # Push moving traces data to front of list
+                moving_traces_data.insert(0, self._traces_data[ci])
+                del self._traces_data[ci]
+
+            # #### Sort new_inds and moving_traces_data by new_inds ####
+            new_inds, moving_traces_data = zip(*sorted(zip(new_inds, moving_traces_data)))
+
+            # #### Insert by new_inds in forward order ####
+            for ni, trace_data in zip(new_inds, moving_traces_data):
+                self._traces_data.insert(ni, trace_data)
+
+            # pprint(self._traces_data)
 
         # Update _traces order
-        self._traces_data = [_trace for i, _trace in sorted(zip(new_inds, traces_data_post_removal))]
         self._traces_deltas = [_trace for i, _trace in sorted(zip(new_inds, traces_deltas_post_removal))]
-
-        self._traces = new_traces
+        self._traces = tuple(new_traces)
 
     def restyle(self, style, trace_indexes=None):
         if trace_indexes is None:
@@ -442,7 +467,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             trace._orphan_data.clear()
 
         # Update python side
-        self._traces_data = self._traces_data + new_traces_data
+        self._traces_data.extend(new_traces_data)  # append instead of assignment so we don't trigger serialization
         self._traces_deltas = self._traces_deltas + [{} for trace in traces]
         self._traces = self._traces + traces
 
@@ -460,7 +485,8 @@ class BaseFigureWidget(widgets.DOMWidget):
             traces_data['_restyle_msg_id'] = restyle_msg_id
 
         # Send to front end
-        # print(f'addTraces: {traces_data}')
+        # print(f'addTraces:')
+        # pprint(new_traces_data)
         add_traces_msg = new_traces_data
         self._py2js_addTraces = add_traces_msg
         self._py2js_addTraces = None

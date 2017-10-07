@@ -48,6 +48,9 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         FigureModel.__super__.initialize.apply(this, arguments);
         console.log('FigureModel: initialize');
 
+        this.on('change:_py2js_addTraces', this.do_addTraces, this);
+        this.on('change:_py2js_deleteTraces', this.do_deleteTraces, this);
+        this.on('change:_py2js_moveTraces', this.do_moveTraces, this);
         this.on("change:_py2js_restyle", this.do_restyle, this);
         this.on("change:_py2js_relayout", this.do_relayout, this);
         this.on("change:_py2js_update", this.do_update, this);
@@ -96,6 +99,72 @@ var FigureModel = widgets.DOMWidgetModel.extend({
             trace_indexes = [trace_indexes];
         }
         return trace_indexes
+    },
+
+
+    do_addTraces: function () {
+        // add trace to plot
+        console.log('Figure Model: do_addTraces');
+        var data = this.get('_py2js_addTraces');
+        console.log('do_addTraces');
+
+        if (data !== null) {
+            console.log(data);
+            var tracesData = this.get('_traces_data');
+            _.forEach(data, function (traceData) {
+                tracesData.push(traceData);
+            })
+        }
+    },
+
+    do_deleteTraces: function () {
+        // add trace to plot
+        var data = this.get('_py2js_deleteTraces');
+        console.log('Figure Model: do_deleteTraces');
+        if (data !== null) {
+            var delete_inds = data['delete_inds'];
+            var tracesData = this.get('_traces_data');
+
+            // Remove del inds in reverse order so indexes remain valid throughout loop
+            delete_inds.slice().reverse().forEach(function (del_ind) {
+                tracesData.splice(del_ind, 1);
+            });
+        }
+    },
+
+    do_moveTraces: function () {
+        console.log('Figure Model: do_moveTraces');
+
+        var move_data = this.get('_py2js_moveTraces');
+        console.log('do_moveTraces');
+
+        if (move_data !== null) {
+            var currentInds = move_data[0];
+            var newInds = move_data[1];
+            var tracesData = this.get('_traces_data');
+
+            // ### Remove by curr_inds in reverse order ###
+            var movingTracesData = [];
+            for (var ci = currentInds.length - 1; ci >= 0; ci--) {
+                // Insert moving tracesData at beginning of the list
+                movingTracesData.splice(0, 0, tracesData[currentInds[ci]]);
+                tracesData.splice(currentInds[ci], 1);
+            }
+
+            // ### Sort newInds and movingTracesData by newInds ###
+            var newIndexSortedArrays = _(newInds).zip(movingTracesData)
+                .sortBy(0)
+                .unzip()
+                .value();
+
+            newInds = newIndexSortedArrays[0];
+            movingTracesData = newIndexSortedArrays[1];
+
+            // ### Insert by newInds in forward order ###
+            for (var ni = 0; ni < newInds.length; ni++) {
+                tracesData.splice(newInds[ni], 0, movingTracesData[ni]);
+            }
+        }
     },
 
     do_restyle: function () {

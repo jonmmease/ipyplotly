@@ -100,6 +100,12 @@ class DataArrayValidator(BaseValidator):
             if new_v.dtype.kind not in ['u', 'i', 'f', 'O']:  # (un)signed int, float, or object
                 new_v = np.array(v, dtype='object')
 
+        # Convert int64 arrays to int32
+        # -----------------------------
+        # JavaScript doesn't support int64 typed arrays
+        if new_v.dtype == 'int64':
+            new_v = new_v.astype('int32')
+
         # Set new array to be read-only
         # -----------------------------
         new_v.flags['WRITEABLE'] = False
