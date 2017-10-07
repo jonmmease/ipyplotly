@@ -23,6 +23,7 @@ import io
 import tempfile
 import os
 import pathlib
+import numpy as np
 
 # TODO:
 
@@ -351,7 +352,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                             val_parent.pop(last_key)
                             any_vals_changed = True
                     elif isinstance(val_parent, dict):
-                        if last_key not in val_parent or val_parent[last_key] != trace_v:
+                        if last_key not in val_parent or not BasePlotlyType._vals_equal(val_parent[last_key], trace_v):
                             val_parent[last_key] = trace_v
                             any_vals_changed = True
 
@@ -665,7 +666,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                         val_parent[last_key] = v
                         relayout_msg[raw_key] = v
                 elif isinstance(val_parent, dict):
-                    if last_key not in val_parent or val_parent[last_key] != v:
+                    if last_key not in val_parent or not BasePlotlyType._vals_equal(val_parent[last_key], v):
                         val_parent[last_key] = v
                         relayout_msg[raw_key] = v
 
@@ -1217,7 +1218,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                             should_remove=should_remove,
                             relayout_path=relayout_path + (from_prop,)))
                 else:
-                    if from_prop not in to_data or to_data[from_prop] != from_val:
+                    if from_prop not in to_data or not BasePlotlyType._vals_equal(to_data[from_prop], from_val):
                         # if from_prop in to_data:
                         #     print(f'to_data[from_prop] != from_val -- {to_data}[{from_prop}] != {from_val}:')
                         to_data[from_prop] = from_val
@@ -1246,7 +1247,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                             should_remove=should_remove,
                             relayout_path=relayout_path + (i,)))
                 else:
-                    if to_data[i] != from_val:
+                    if not BasePlotlyType._vals_equal(to_data[i], from_val):
                         to_data[i] = from_val
                         relayout_terms[relayout_path + (i,)] = from_val
 
@@ -1366,6 +1367,13 @@ class BasePlotlyType:
     def _in_batch_mode(self):
         return self.parent and self.parent._in_batch_mode
 
+    @staticmethod
+    def _vals_equal(v1, v2):
+        if isinstance(v1, np.ndarray) or isinstance(v2, np.ndarray):
+            return np.array_equal(v1, v2)
+        else:
+            return v1 == v2
+
     def _set_prop(self, prop, val):
         if val is Undefined:
             # Do nothing
@@ -1382,7 +1390,7 @@ class BasePlotlyType:
                 self._send_update(prop, val)
         else:
             self._init_data()
-            if prop not in self._data or self._data[prop] != val:
+            if prop not in self._data or not BasePlotlyType._vals_equal(self._data[prop], val):
                 if not self._in_batch_mode:
                     self._data[prop] = val
                 self._send_update(prop, val)
@@ -1417,7 +1425,7 @@ class BasePlotlyType:
                 self._data[prop] = new_dict_val
 
         # Send update if there was a change in value
-        if curr_dict_val != new_dict_val:
+        if not BasePlotlyType._vals_equal(curr_dict_val, new_dict_val):
             self._send_update(prop, new_dict_val)
 
         # Reparent new value and clear orphan data
@@ -1463,7 +1471,7 @@ class BasePlotlyType:
                 self._data[prop] = new_dict_vals
 
         # Send update if there was a change in value
-        if curr_dict_vals != new_dict_vals:
+        if not BasePlotlyType._vals_equal(curr_dict_vals, new_dict_vals):
             self._send_update(prop, new_dict_vals)
 
         # Reparent new values and clear orphan data
