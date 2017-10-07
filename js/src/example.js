@@ -362,46 +362,64 @@ var FigureModel = widgets.DOMWidgetModel.extend({
     }, widgets.DOMWidgetModel.serializers)
 });
 
-function js2py_serializer(x, widgetManager) {
+var numpy_dtype_to_typedarray_type = {
+    int8: Int8Array,
+    int16: Int16Array,
+    int32: Int32Array,
+    uint8: Uint8Array,
+    uint16: Uint16Array,
+    uint32: Uint32Array,
+    float32: Float32Array,
+    float64: Float64Array
+};
+
+function js2py_serializer(v, widgetManager) {
     var res;
-    if (Array.isArray(x)) {
-        res = new Array(x.length);
-        for (var i = 0; i < x.length; i++) {
-            res[i] = js2py_serializer(x[i]);
+    if (Array.isArray(v)) {
+        res = new Array(v.length);
+        for (var i = 0; i < v.length; i++) {
+            res[i] = js2py_serializer(v[i]);
         }
-    } else if (_.isPlainObject(x)) {
+    } else if (_.isPlainObject(v)) {
         res = {};
-        for (var p in x) {
-            if (x.hasOwnProperty(p)) {
-                res[p] = js2py_serializer(x[p]);
+        for (var p in v) {
+            if (v.hasOwnProperty(p)) {
+                res[p] = js2py_serializer(v[p]);
             }
         }
-    } else if (x === undefined) {
+    } else if (v === undefined) {
         res = '_undefined_';
     } else {
-        res = x;
+        res = v;
     }
     return res
 }
 
-function py2js_serializer(x, widgetManager) {
+function py2js_serializer(v, widgetManager) {
+    console.log(v);
     var res;
-    if (Array.isArray(x)) {
-        res = new Array(x.length);
-        for (var i = 0; i < x.length; i++) {
-            res[i] = py2js_serializer(x[i]);
+    if (Array.isArray(v)) {
+        res = new Array(v.length);
+        for (var i = 0; i < v.length; i++) {
+            res[i] = py2js_serializer(v[i]);
         }
-    } else if (_.isPlainObject(x)) {
-        res = {};
-        for (var p in x) {
-            if (x.hasOwnProperty(p)) {
-                res[p] = py2js_serializer(x[p]);
+    } else if (_.isPlainObject(v)) {
+        if (_.has(v, 'buffer') && _.has(v, 'dtype') && _.has(v, 'shape')) {
+            var typedarray_type = numpy_dtype_to_typedarray_type[v.dtype];
+            var typedarray = new typedarray_type(v.buffer.buffer);
+            res = Array.from(typedarray);
+        } else {
+            res = {};
+            for (var p in v) {
+                if (v.hasOwnProperty(p)) {
+                    res[p] = py2js_serializer(v[p]);
+                }
             }
         }
-    } else if (x === '_undefined_') {
+    } else if (v === '_undefined_') {
         res = undefined;
     } else {
-        res = x;
+        res = v;
     }
     return res
 }

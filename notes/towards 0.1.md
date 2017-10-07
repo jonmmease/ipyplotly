@@ -43,6 +43,15 @@ into untyped arrays during clone process in render() and during the create_delta
 - Brushing callback returns typed selection array.
 - Optional, all data_array / arrayOk properties accept standard lists or numpy arrays
 
+TODO: 
+    - Update validators to allow 1d numpy arrays of TypedArray supported datatypes. These arrays are preserved as is.
+      String and object arrays are converted to lists. int64 arrays downcast to int32 with warning.
+    - py2js_serialize on Python side turns these into memoryview, dtype, shape dicts
+    - py2js_serialize on JS side turns these into TypedArrays and then into standard Arrays
+    - No js2py changes needed as the JS model will still be traditional Arrays.
+    
+This should speed up the Python->JS transfer significantly. When Plotly starts supporting typed arrays as input I can
+ move the typed arrays into the JS model, but for now there's no advantage of doing this and it's simpler not to.
 
 ## Testing
 
