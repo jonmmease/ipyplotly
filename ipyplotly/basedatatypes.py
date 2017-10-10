@@ -344,7 +344,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
                     restyle_msg_vs.append(trace_v)
 
-                    if trace_v == Undefined:
+                    if BasePlotlyType._vals_equal(trace_v, Undefined):
                         # Do nothing
                         pass
                     elif trace_v is None:
