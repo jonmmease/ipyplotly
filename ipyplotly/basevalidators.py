@@ -241,8 +241,21 @@ class NumberValidator(BaseValidator):
     def __init__(self, name, parent_name, dflt=None, min=None, max=None, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.default = dflt
-        self.min_val = min if min is not None else -np.inf
-        self.max_val = max if max is not None else np.inf
+
+        # Handle min
+        if min is None and max is not None:
+            # Max was specified, so make min -inf
+            self.min_val = -np.inf
+        else:
+            self.min_val = min
+
+        # Handle max
+        if max is None and min is not None:
+            # Min was specified, so make min inf
+            self.max_val = np.inf
+        else:
+            self.max_val = max
+
         self.array_ok = array_ok
 
     def validate_coerce(self, v):
@@ -408,6 +421,15 @@ class StringValidator(BaseValidator):
                 v = self.default
 
         elif self.array_ok and DataArrayValidator.is_array(v):
+
+            # Make sure all elements are strings. Is there a more efficient way to do this in numpy?
+            invalid_els = [e for e in v if not isinstance(e, str)]
+            if invalid_els:
+                raise ValueError(('All elements of the {name} property of {parent_name} must be strings\n'
+                                  '    Invalid elements include: {invalid}').format(name=self.name,
+                                                                                    parent_name=self.parent_name,
+                                                                                    invalid=invalid_els[:10]))
+
             v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v, dtype='unicode')
 
             if self.no_blank:
@@ -478,7 +500,7 @@ class ColorValidator(BaseValidator):
         },
     """
     re_hex = re.compile('#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})')
-    re_rgb_etc = re.compile('(rgb|hsl|hsv)a?\([\d.]{1,4}%?(,[\d.]{1,4}%?){2,3}\)')
+    re_rgb_etc = re.compile('(rgb|hsl|hsv)a?\([\d.]+%?(,[\d.]+%?){2,3}\)')
 
     named_colors = [
         "aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige", "bisque", "black", "blanchedalmond",
@@ -502,12 +524,13 @@ class ColorValidator(BaseValidator):
 
     valid_color_description = """\
     Colors may be specified as:
+      - Numbers that will be interpreted as colors according to the current values of colorscale, cmin, and cmax
       - Hex strings (e.g. '#ff0000')
       - rgb/rgba strings (e.g. 'rgb(255, 0, 0)')
       - hsl/hsla strings (e.g. 'hsl(0, 100%, 50%)')
       - hsv/hsva strings (e.g. 'hsv(0, 100%, 100%)')
-      - Named CSS colors: 
-            {clrs} 
+      - Named CSS colors:
+            {clrs}
     """.format(clrs='\n'.join(textwrap.wrap(', '.join(named_colors), width=80, subsequent_indent=' ' * 12)))
 
     def __init__(self, name, parent_name, dflt=None, array_ok=False, **_):
@@ -529,7 +552,7 @@ class ColorValidator(BaseValidator):
                 v = v_array
             else:
                 # ### Check that strings are valid colors ###
-                invalid_els = [e for e in v if not (isinstance(e, str) or isinstance(e, numbers.Number))]
+                invalid_els = [e for e in v if not isinstance(e, (str, numbers.Number))]
                 if invalid_els:
                     raise ValueError(('All elements of the {name} property of {parent_name} must be strings or '
                                       'numbers\n'
@@ -550,8 +573,8 @@ class ColorValidator(BaseValidator):
                 v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v, dtype='unicode')
 
         else:
-            if not isinstance(v, str):
-                raise ValueError(("The {name} property of {parent_name} must be a string.\n"
+            if not isinstance(v, (str, numbers.Number)):
+                raise ValueError(("The {name} property of {parent_name} must be a string or a number.\n"
                                   "    Received value of type {typ}").format(name=self.name,
                                                                              parent_name=self.parent_name,
                                                                              typ=type(v)))

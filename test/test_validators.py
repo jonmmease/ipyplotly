@@ -77,7 +77,11 @@ def enumerated_validator_aok(request):
                           ['first', 'second', 'third', 4]])
 def test_enumeration_validator_acceptance_aok(val, enumerated_validator_aok):
     # Values should be accepted and returned unchanged
-    assert enumerated_validator_aok.validate_coerce(val) == val
+    coerce_val = enumerated_validator_aok.validate_coerce(val)
+    if isinstance(val, (list, np.ndarray)):
+        assert np.array_equal(coerce_val, np.array(val, dtype=coerce_val.dtype))
+    else:
+        assert coerce_val == val
 
 
 # ### Rejection by value ###
@@ -233,11 +237,16 @@ def test_number_validator_acceptance_aok_list(val, number_validator_aok: NumberV
 # ### Coerce ###
 #     Coerced to general consistent numeric type
 @pytest.mark.parametrize('val,expected',
-                         [([1.0, 0], [1.0, 0.0]), ([1, -1], [1.0, -1.0]), ([-0.1234, 0, -1], [-0.1234, 0.0, -1.0])])
+                         [([1.0, 0], [1.0, 0.0]),
+                          (np.array([1, -1]), [1.0, -1.0]),
+                          ([-0.1234, 0, -1], [-0.1234, 0.0, -1.0])])
 def test_number_validator_acceptance_aok_list(val, expected, number_validator_aok: NumberValidator):
     for v, e in zip(number_validator_aok.validate_coerce(val), expected):
-        assert type(v) == type(e)
-        assert v == e
+        if isinstance(e, (list, np.ndarray)):
+            assert v.dtype == 'float'
+            assert np.array_equal(v, np.array(e, dtype=v.dtype))
+        else:
+            assert v == e
 
 
 # ### Rejection ###
@@ -344,8 +353,11 @@ def test_integer_validator_acceptance_aok_list(val, integer_validator_aok: Integ
                          [([1.0, 0], [1, 0]), ([1, -1], [1, -1]), ([-1.9, 0, 5.1], [-1, 0, 5])])
 def test_integer_validator_acceptance_aok_list(val, expected, integer_validator_aok: IntegerValidator):
     for v, e in zip(integer_validator_aok.validate_coerce(val), expected):
-        assert type(v) == type(e)
-        assert v == e
+        if isinstance(e, (list, np.ndarray)):
+            assert v.dtype == 'int'
+            assert np.array_equal(v, np.array(e, dtype=v.dtype))
+        else:
+            assert v == e
 
 
 # ### Rejection ###
@@ -467,10 +479,13 @@ def test_string_validator_acceptance_aok_scalars(val, string_validator_aok: Stri
 
 
 @pytest.mark.parametrize('val',
-                         [['foo'], ['BAR', ''], ['baz', 'baz', 'baz']])
+                         ['foo', ['foo'], np.array(['BAR', ''], dtype='object'), ['baz', 'baz', 'baz']])
 def test_string_validator_acceptance_aok_list(val, string_validator_aok: StringValidator):
-    assert string_validator_aok.validate_coerce(val) == val
-
+    coerce_val = string_validator_aok.validate_coerce(val)
+    if isinstance(val, (list, np.ndarray)):
+        assert np.array_equal(coerce_val, np.array(val, dtype=coerce_val.dtype))
+    else:
+        assert coerce_val == val
 
 # ### Rejection by type ###
 @pytest.mark.parametrize('val',
@@ -499,10 +514,13 @@ def string_validator_no_blanks_aok(request):
 
 
 @pytest.mark.parametrize('val',
-                         [['bar', 'HELLO!!!'], ['world!@#$%^&*()']])
+                         ['123', ['bar', 'HELLO!!!'], ['world!@#$%^&*()']])
 def test_string_validator_acceptance_no_blanks_aok(val, string_validator_no_blanks_aok: StringValidator):
-    assert string_validator_no_blanks_aok.validate_coerce(val) == val
-
+    coerce_val = string_validator_no_blanks_aok.validate_coerce(val)
+    if isinstance(val, (list, np.ndarray)):
+        assert np.array_equal(coerce_val, np.array(val, dtype=coerce_val.dtype))
+    else:
+        assert coerce_val == val
 
 @pytest.mark.parametrize('val',
                          ['', ['foo', 'bar', ''], ['']])
@@ -526,7 +544,7 @@ def color_validator(request):
 
 # ### Acceptance ###
 @pytest.mark.parametrize('val',
-                         ['red', 'rgb(255, 0, 0)', 'hsl(0, 100%, 50%)', 'hsla(0, 100%, 50%, 100%)',
+                         ['red', 23, 15, 'rgb(255, 0, 0)', 'hsl(0, 100%, 50%)', 'hsla(0, 100%, 50%, 100%)',
                           'hsv(0, 100%, 100%)', 'hsva(0, 100%, 100%, 50%)'])
 def test_color_validator_acceptance(val, color_validator: StringValidator):
     assert color_validator.validate_coerce(val) == val
@@ -534,7 +552,7 @@ def test_color_validator_acceptance(val, color_validator: StringValidator):
 
 # ### Rejection by value ###
 @pytest.mark.parametrize('val',
-                         ['redd', 'rgbbb(255, 0, 0)', 'hsl(0, 10000%, 50%)'])
+                         ['redd', 'rgbbb(255, 0, 0)', 'hsl(0, 1%0000%, 50%)'])
 def test_color_validator_rejection(val, color_validator: StringValidator):
     with pytest.raises(ValueError) as validation_failure:
         color_validator.validate_coerce(val)
@@ -551,23 +569,28 @@ def color_validator_aok(request):
 
 # ### Acceptance ###
 @pytest.mark.parametrize('val',
-                         [['red', 'rgb(255, 0, 0)'],
+                         ['blue', 23, [0, 1, 2],
+                          ['red', 'rgb(255, 0, 0)'],
                           ['hsl(0, 100%, 50%)', 'hsla(0, 100%, 50%, 100%)', 'hsv(0, 100%, 100%)'],
                           ['hsva(0, 100%, 100%, 50%)']])
 def test_color_validator_acceptance(val, color_validator_aok: StringValidator):
-    assert color_validator_aok.validate_coerce(val) == val
+    coerce_val = color_validator_aok.validate_coerce(val)
+    if isinstance(val, (list, np.ndarray)):
+        assert np.array_equal(coerce_val, np.array(val, dtype=coerce_val.dtype))
+    else:
+        assert coerce_val == val
 
 
 # ### Rejection ###
 @pytest.mark.parametrize('val',
                          [['redd', 'rgb(255, 0, 0)'],
-                          ['hsl(0, 100%, 5000%)', 'hsla(0, 100%, 50%, 100%)', 'hsv(0, 100%, 100%)'],
+                          ['hsl(0, 100%, 50_00%)', 'hsla(0, 100%, 50%, 100%)', 'hsv(0, 100%, 100%)'],
                           ['hsva(0, 1%00%, 100%, 50%)']])
-def test_color_validator_acceptance(val, color_validator_aok: StringValidator):
+def test_color_validator_rejection_aok(val, color_validator_aok: StringValidator):
     with pytest.raises(ValueError) as validation_failure:
         color_validator_aok.validate_coerce(val)
 
-    assert 'must be valid colors' in str(validation_failure.value)
+    assert 'must be numbers or valid colors' in str(validation_failure.value)
 
 
 
