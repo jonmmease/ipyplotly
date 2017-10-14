@@ -24,13 +24,6 @@ import re
 # I think that's all of the code gen tasks. Validators, Data Classes, and Figure methods
 from PIL import Image
 
-class _NoDefault(object):
-    def __repr__(self):
-        return '(no default)'
-NoDefault = _NoDefault()
-del _NoDefault
-
-
 class BaseValidator:
     def __init__(self, name, parent_name):
         self.parent_name = parent_name
@@ -50,18 +43,14 @@ class DataArrayValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=None, **_):
+    def __init__(self, name, parent_name, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = dflt
 
     def validate_coerce(self, v):
 
         if v is None:
-            if self.default is NoDefault:
-                raise ValueError(('The {name} property of {parent_name} has no default value '
-                                  'and may not be set to None.'.format(name=self.name, parent_name=self.parent_name)))
-            else:
-                v = self.default
+            # Pass None through
+            pass
         elif DataArrayValidator.is_array(v):
             v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v)
         else:
@@ -127,12 +116,11 @@ class EnumeratedValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, values, dflt=None, array_ok=False, coerce_number=False, **_):
+    def __init__(self, name, parent_name, values, array_ok=False, coerce_number=False, **_):
         super().__init__(name=name, parent_name=parent_name)
 
         # coerce_number is rarely used and not implemented
         self.coerce_number = coerce_number
-        self.default = dflt
         self.values = values
 
         # compile regexes
@@ -161,8 +149,8 @@ class EnumeratedValidator(BaseValidator):
 
     def validate_coerce(self, v):
         if v is None:
-            v = self.default
-
+            # Pass None through
+            pass
         elif self.array_ok and DataArrayValidator.is_array(v):
             invalid_els = [e for e in v if (not self.in_values(e))]
             if invalid_els:
@@ -208,14 +196,13 @@ class BooleanValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=None, **_):
+    def __init__(self, name, parent_name, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = dflt
 
     def validate_coerce(self, v):
         if v is None:
-            v = self.default
-
+            # Pass None through
+            pass
         elif not isinstance(v, bool):
             raise ValueError(("The {name} property of {parent_name} must be a bool. "
                               "Received value of type {typ}: {v}").format(name=self.name,
@@ -238,9 +225,8 @@ class NumberValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=None, min=None, max=None, array_ok=False, **_):
+    def __init__(self, name, parent_name, min=None, max=None, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = dflt
 
         # Handle min
         if min is None and max is not None:
@@ -260,8 +246,8 @@ class NumberValidator(BaseValidator):
 
     def validate_coerce(self, v):
         if v is None:
-            v = self.default
-
+            # Pass None through
+            pass
         elif self.array_ok and DataArrayValidator.is_array(v):
 
             try:
@@ -322,17 +308,29 @@ class IntegerValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=None, min=None, max=None, array_ok=False, **_):
+    def __init__(self, name, parent_name, min=None, max=None, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = int(dflt) if dflt is not None else None
-        self.min_val = int(min) if min is not None else None
-        self.max_val = int(max) if max is not None else None
+
+        # Handle min
+        if min is None and max is not None:
+            # Max was specified, so make min -inf
+            self.min_val = np.iinfo(np.int32).min
+        else:
+            self.min_val = min
+
+        # Handle max
+        if max is None and min is not None:
+            # Min was specified, so make min inf
+            self.max_val = np.iinfo(np.int32).max
+        else:
+            self.max_val = max
+
         self.array_ok = array_ok
 
     def validate_coerce(self, v):
         if v is None:
-            v = self.default
-
+            # Pass None through
+            pass
         elif self.array_ok and DataArrayValidator.is_array(v):
 
             try:
@@ -404,9 +402,8 @@ class StringValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=None, no_blank=False, strict=False, array_ok=False, values=None, **_):
+    def __init__(self, name, parent_name, no_blank=False, strict=False, array_ok=False, values=None, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = dflt
         self.no_blank = no_blank
         self.strict = strict        # Not implemented. We're always strict
         self.array_ok = array_ok
@@ -414,12 +411,8 @@ class StringValidator(BaseValidator):
 
     def validate_coerce(self, v):
         if v is None:
-            if self.default is NoDefault:
-                raise ValueError(('The {name} property of {parent_name} has no default value '
-                                  'and may not be set to None.'.format(name=self.name, parent_name=self.parent_name)))
-            else:
-                v = self.default
-
+            # Pass None through
+            pass
         elif self.array_ok and DataArrayValidator.is_array(v):
 
             # Make sure all elements are strings. Is there a more efficient way to do this in numpy?
@@ -533,18 +526,14 @@ class ColorValidator(BaseValidator):
             {clrs}
     """.format(clrs='\n'.join(textwrap.wrap(', '.join(named_colors), width=80, subsequent_indent=' ' * 12)))
 
-    def __init__(self, name, parent_name, dflt=None, array_ok=False, **_):
+    def __init__(self, name, parent_name, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = dflt
         self.array_ok = array_ok
 
     def validate_coerce(self, v):
         if v is None:
-            if self.default is NoDefault:
-                raise ValueError(('The {name} property of {parent_name} has no default value '
-                                  'and may not be set to None.'.format(name=self.name, parent_name=self.parent_name)))
-            else:
-                v = self.default
+            # Pass None through
+            pass
         elif self.array_ok and DataArrayValidator.is_array(v):
             v_array = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v)
             if v_array.dtype.kind in ['u', 'i', 'f']:  # (un)signed int or float
@@ -638,16 +627,15 @@ class ColorscaleValidator(BaseValidator):
                  'Rainbow', 'Portland', 'Jet', 'Hot', 'Blackbody', 'Earth', 'Electric', 'Viridis']
         """
 
-    def __init__(self, name, parent_name, dflt=None, **_):
+    def __init__(self, name, parent_name, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = dflt
 
     def validate_coerce(self, v):
         v_valid = False
 
         if v is None:
-            v = self.default
-
+            # Pass None through
+            pass
         if v is None:
             v_valid = True
         elif isinstance(v, str):
@@ -685,14 +673,13 @@ class AngleValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=None, **_):
+    def __init__(self, name, parent_name, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = dflt
 
     def validate_coerce(self, v):
         if v is None:
-            v = self.default
-
+            # Pass None through
+            pass
         return v
 
 
@@ -708,31 +695,31 @@ class SubplotidValidator(BaseValidator):
     """
     def __init__(self, name, parent_name, dflt, **_):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = dflt
+        self.base = dflt
         self.regex = dflt + "(\d*)"
 
     def validate_coerce(self, v):
         if v is None:
-            v = self.default
+            v = self.base
         elif not isinstance(v, str):
             raise ValueError(("The {name} property of {parent_name} must be a string. "
                               "Received value of type {typ}").format(name=self.name,
                                                                      parent_name=self.parent_name,
                                                                      typ=type(v)))
         elif not re.fullmatch(self.regex, v):
-            raise ValueError(("The {name} property of {parent_name} must be a string prefixed by '{default}', "
+            raise ValueError(("The {name} property of {parent_name} must be a string prefixed by '{base}', "
                               "optionally followed by an integer > 1\n"
                               "Received '{v}'").format(name=self.name,
                                                        parent_name=self.parent_name,
-                                                       default=self.default, v=v))
+                                                       default=self.base, v=v))
         else:
             digit_str = re.fullmatch(self.regex, v).group(1)
             if len(digit_str) > 0 and int(digit_str) in [0, 1]:
-                raise ValueError(("The {name} property of {parent_name} must be a string prefixed by '{default}', "
+                raise ValueError(("The {name} property of {parent_name} must be a string prefixed by '{base}', "
                                   "optionally followed by an integer > 1\n"
                                   "Received '{v}'").format(name=self.name,
                                                            parent_name=self.parent_name,
-                                                           default=self.default, v=v))
+                                                           default=self.base, v=v))
         return v
 
 
@@ -750,10 +737,9 @@ class FlaglistValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, flags, dflt=None, extras=None, array_ok=False, **_):
+    def __init__(self, name, parent_name, flags, extras=None, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.flags = flags
-        self.default = dflt
         self.extras = extras if extras is not None else []
         self.array_ok = array_ok
 
@@ -782,8 +768,8 @@ class FlaglistValidator(BaseValidator):
 
     def validate_coerce(self, v):
         if v is None:
-            v = self.default
-
+            # Pass None through
+            pass
         elif self.array_ok and DataArrayValidator.is_array(v):
             invalid_els = [e for e in v if not isinstance(e, str)]
             if invalid_els:
@@ -836,16 +822,15 @@ class AnyValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, dflt=None, values=None, array_ok=False):
+    def __init__(self, name, parent_name, values=None, array_ok=False):
         super().__init__(name=name, parent_name=parent_name)
-        self.default = dflt
         self.values = values
         self.array_ok = array_ok
 
     def validate_coerce(self, v):
         if v is None:
-            v = self.default
-
+            # Pass None through
+            pass
         if self.array_ok and DataArrayValidator.is_array(v):
             v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v, dtype='object')
 
@@ -865,7 +850,7 @@ class InfoArrayValidator(BaseValidator):
             ]
         }
     """
-    def __init__(self, name, parent_name, items, dflt=None, free_length=None):
+    def __init__(self, name, parent_name, items, free_length=None):
         super().__init__(name=name, parent_name=parent_name)
         self.items = items
 
@@ -874,7 +859,6 @@ class InfoArrayValidator(BaseValidator):
             item_validator = InfoArrayValidator.build_validator(item, '{name}[{i}]'.format(name=name, i=i), parent_name)
             self.item_validators.append(item_validator)
 
-        self.default = dflt
         self.free_length = free_length
 
     @staticmethod
@@ -890,7 +874,8 @@ class InfoArrayValidator(BaseValidator):
 
     def validate_coerce(self, v):
         if v is None:
-            v = self.default
+            # Pass None through
+            pass
         elif not isinstance(v, (list, tuple)):
             raise ValueError(('The {name} property of {parent_name} must be a list or tuple.\n'
                               'Received value of type {typ}: {v}').format(name=self.name,
