@@ -1,19 +1,7 @@
 # TODO: Test remaining validators
 
-# DataArrayValidator
-# ==================
-
-
-# ColorscaleValidator
-# ===================
-
-
 # AngleValidator
 # ==============
-
-
-# SubplotidValidator
-# ==================
 
 
 # AnyValidator

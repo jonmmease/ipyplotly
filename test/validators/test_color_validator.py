@@ -19,10 +19,13 @@ def validator_aok():
 # ------------
 # ### Acceptance ###
 @pytest.mark.parametrize('val',
-                         ['red', 23, 15, 'rgb(255, 0, 0)', 'hsl(0, 100%, 50%)', 'hsla(0, 100%, 50%, 100%)',
+                         ['red', 'BLUE', 23, 15, 'rgb(255, 0, 0)', 'hsl(0, 100%, 50%)', 'hsla(0, 100%, 50%, 100%)',
                           'hsv(0, 100%, 100%)', 'hsva(0, 100%, 100%, 50%)'])
 def test_acceptance(val, validator: ColorValidator):
-    assert validator.validate_coerce(val) == val
+    if isinstance(val, str):
+        assert validator.validate_coerce(val) == str.replace(val.lower(), ' ', '')
+    else:
+        assert validator.validate_coerce(val) == val
 
 
 # ### Rejection by value ###
@@ -46,8 +49,12 @@ def test_rejection(val, validator: ColorValidator):
 def test_acceptance_aok(val, validator_aok: ColorValidator):
     coerce_val = validator_aok.validate_coerce(val)
     if isinstance(val, (list, np.ndarray)):
-        assert np.array_equal(coerce_val, np.array(val, dtype=coerce_val.dtype))
+        expected = np.array(
+            [str.replace(v.lower(), ' ', '') if isinstance(v, str) else v for v in val],
+            dtype=coerce_val.dtype)
+        assert np.array_equal(coerce_val, expected)
     else:
+        expected = str.replace(val.lower(), ' ', '') if isinstance(val, str) else val
         assert coerce_val == val
 
 

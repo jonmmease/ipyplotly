@@ -549,7 +549,9 @@ class ColorValidator(BaseValidator):
                                                                                         parent_name=self.parent_name,
                                                                                         invalid=invalid_els[:10]))
 
-                invalid_els = [c for c in v if not ColorValidator.is_valid_color(c)]
+                validated_v = [ColorValidator.perform_validate_coerce(e) for e in v]
+                invalid_els = [el for el, validated_el in zip(v, validated_v) if validated_el is None]
+
                 if invalid_els:
                     raise ValueError(('All elements of the {name} property of {parent_name} must be numbers or valid '
                                       'colors\n'
@@ -559,7 +561,7 @@ class ColorValidator(BaseValidator):
                                                                 invalid=invalid_els[:10],
                                                                 vald_clr_desc=ColorValidator.valid_color_description))
 
-                v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v, dtype='unicode')
+                v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(validated_v, dtype='unicode')
 
         else:
             if not isinstance(v, (str, numbers.Number)):
@@ -568,7 +570,8 @@ class ColorValidator(BaseValidator):
                                                                              parent_name=self.parent_name,
                                                                              typ=type(v)))
 
-            if not ColorValidator.is_valid_color(v):
+            validated_v = ColorValidator.perform_validate_coerce(v)
+            if validated_v is None:
                 raise ValueError(("The {name} property of {parent_name} must be a valid color.\n"
                                   "    Received: {v}\n"
                                   "{vald_clr_desc}\n"
@@ -576,31 +579,58 @@ class ColorValidator(BaseValidator):
                                              parent_name=self.parent_name,
                                              v=v,
                                              vald_clr_desc=ColorValidator.valid_color_description))
+            v = validated_v
 
         return v
 
     @staticmethod
-    def is_valid_color(v: str, allow_number=True):
+    def perform_validate_coerce(v, allow_number=True):
 
         if isinstance(v, numbers.Number) and allow_number:
-            return True
-
-        # Remove spaces so regexes don't need to bother with them.
-        v = v.replace(' ', '')
-        v = v.lower()
-
-        if ColorValidator.re_hex.fullmatch(v):
-            # valid hex color (e.g. #f34ab3)
-            return True
-        elif ColorValidator.re_rgb_etc.fullmatch(v):
-            # Valid rgb(a), hsl(a), hsv(a) color (e.g. rgba(10, 234, 200, 50%)
-            return True
-        elif v in ColorValidator.named_colors:
-            # Valid named color (e.g. 'coral')
-            return True
+            # If allow_numbers then any number is ok
+            return v
+        elif not isinstance(v, str):
+            return None
         else:
-            # Not a valid color
-            return False
+            # Remove spaces so regexes don't need to bother with them.
+            v = v.replace(' ', '')
+            v = v.lower()
+
+            if ColorValidator.re_hex.fullmatch(v):
+                # valid hex color (e.g. #f34ab3)
+                return v
+            elif ColorValidator.re_rgb_etc.fullmatch(v):
+                # Valid rgb(a), hsl(a), hsv(a) color (e.g. rgba(10, 234, 200, 50%)
+                return v
+            elif v in ColorValidator.named_colors:
+                # Valid named color (e.g. 'coral')
+                return v
+            else:
+                # Not a valid color
+                return None
+
+    # @staticmethod
+    # def is_valid_color(v: str, allow_number=True):
+    #
+    #     if isinstance(v, numbers.Number) and allow_number:
+    #         return True
+    #
+    #     # Remove spaces so regexes don't need to bother with them.
+    #     v = v.replace(' ', '')
+    #     v = v.lower()
+    #
+    #     if ColorValidator.re_hex.fullmatch(v):
+    #         # valid hex color (e.g. #f34ab3)
+    #         return True
+    #     elif ColorValidator.re_rgb_etc.fullmatch(v):
+    #         # Valid rgb(a), hsl(a), hsv(a) color (e.g. rgba(10, 234, 200, 50%)
+    #         return True
+    #     elif v in ColorValidator.named_colors:
+    #         # Valid named color (e.g. 'coral')
+    #         return True
+    #     else:
+    #         # Not a valid color
+    #         return False
 
 
 class ColorscaleValidator(BaseValidator):
@@ -639,8 +669,10 @@ class ColorscaleValidator(BaseValidator):
         if v is None:
             v_valid = True
         elif isinstance(v, str):
-            if v in ColorscaleValidator.named_colorscales:
+            v_match = [el for el in ColorscaleValidator.named_colorscales if el.lower() == v.lower()]
+            if v_match:
                 v_valid = True
+                v = v_match[0]
 
         elif DataArrayValidator.is_array(v) and len(v) > 0:
             invalid_els = [e for e in v
@@ -649,9 +681,12 @@ class ColorscaleValidator(BaseValidator):
                            not isinstance(e[0], numbers.Number) or
                            not (0 <= e[0] <= 1) or
                            not isinstance(e[1], str) or
-                           not ColorValidator.is_valid_color(e[1])]
+                           ColorValidator.perform_validate_coerce(e[1]) is None]
             if len(invalid_els) == 0:
                 v_valid = True
+
+                # Convert to tuple of tuples so colorscale is immutable
+                v = tuple([tuple([e[0], ColorValidator.perform_validate_coerce(e[1])]) for e in v])
 
         if not v_valid:
             raise ValueError(("The {name} property of {parent_name} must be a valid colorscale.\n"
