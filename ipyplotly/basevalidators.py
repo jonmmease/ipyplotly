@@ -757,14 +757,17 @@ class FlaglistValidator(BaseValidator):
 {extras_line}
         """.format(flags=self.flags, eg_flag='+'.join(self.flags[:2]), extras_line=extras_line)
 
-    def is_flaglist_valid(self, v):
-        if not isinstance(v, str):
-            return True
+    def perform_validate_coerce(self, v):
+        split_vals = [e.strip() for e in re.split('[,+]', v)]
 
-        split_vals = v.split('+')
         all_flags_valid = [f for f in split_vals if f not in self.all_flags] == []
         has_extras = [f for f in split_vals if f in self.extras] != []
-        return all_flags_valid and (not has_extras or len(split_vals) == 1)
+
+        is_valid = all_flags_valid and (not has_extras or len(split_vals) == 1)
+        if is_valid:
+            return '+'.join(split_vals)
+        else:
+            return None
 
     def validate_coerce(self, v):
         if v is None:
@@ -773,14 +776,16 @@ class FlaglistValidator(BaseValidator):
         elif self.array_ok and DataArrayValidator.is_array(v):
             invalid_els = [e for e in v if not isinstance(e, str)]
             if invalid_els:
-                raise ValueError(('All elements of the {name} property of {parent_name} must be strings\n'
+                raise ValueError(('All elements of the {name} property of {parent_name} must be strings.\n'
                                   '    Invalid elements include: {invalid}').format(name=self.name,
                                                                                     parent_name=self.parent_name,
                                                                                     invalid=invalid_els[:10]))
 
-            invalid_els = [e for e in v if not self.is_flaglist_valid(e)]
+            validated_v = [self.perform_validate_coerce(e) for e in v]  # Coerce individual strings
+
+            invalid_els = [el is None for el, validated_el in zip(v, validated_v) if validated_el is None]
             if invalid_els:
-                raise ValueError(('Invalid flaglist element(s) received for {name} property of {parent_name}\n'
+                raise ValueError(('Invalid flaglist element(s) received for {name} property of {parent_name}.\n'
                                   '    Invalid elements include: {invalid}\n'  
                                   '{valid_desc}').format(
                     name=self.name,
@@ -789,16 +794,20 @@ class FlaglistValidator(BaseValidator):
                     valid_desc=self.valid_description
                 ))
 
-            v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v, dtype='unicode')
+            v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(validated_v, dtype='unicode')
         else:
+
             if not isinstance(v, str):
-                raise ValueError(("The {name} property of {parent_name} must be a string.\n"
+                or_array = ' or array of strings' if self.array_ok else ''
+                raise ValueError(("The {name} property of {parent_name} must be a string{or_array}.\n"
                                   "    Received value of type {typ}").format(name=self.name,
                                                                              parent_name=self.parent_name,
+                                                                             or_array=or_array,
                                                                              typ=type(v)))
 
-            if not self.is_flaglist_valid(v):
-                raise ValueError(('Invalid flaglist received for {name} property of {parent_name}\n'
+            validated_v = self.perform_validate_coerce(v)
+            if validated_v is None:
+                raise ValueError(('Invalid flaglist received for {name} property of {parent_name}.\n'
                                   '    Received value: {v}\n'
                                   '{valid_desc}').format(
                     name=self.name,
@@ -806,6 +815,8 @@ class FlaglistValidator(BaseValidator):
                     v=repr(v),
                     valid_desc=self.valid_description
                 ))
+
+            v = validated_v
 
         return v
 
