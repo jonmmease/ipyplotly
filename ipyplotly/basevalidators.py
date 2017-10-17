@@ -715,6 +715,16 @@ class AngleValidator(BaseValidator):
         if v is None:
             # Pass None through
             pass
+        elif not isinstance(v, numbers.Number):
+            raise ValueError(("The {name} property of {parent_name} must be a number."
+                              "Received value of type {typ}: {v}").format(name=self.name,
+                                                                          parent_name=self.parent_name,
+                                                                          typ=type(v),
+                                                                          v=repr(v)))
+        else:
+            # Normalize v onto the interval [-180, 180)
+            v = (v + 180) % 360 - 180
+
         return v
 
 
