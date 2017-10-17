@@ -751,20 +751,22 @@ class SubplotidValidator(BaseValidator):
                               "Received value of type {typ}").format(name=self.name,
                                                                      parent_name=self.parent_name,
                                                                      typ=type(v)))
-        elif not re.fullmatch(self.regex, v):
-            raise ValueError(("The {name} property of {parent_name} must be a string prefixed by '{base}', "
-                              "optionally followed by an integer > 1\n"
-                              "Received '{v}'").format(name=self.name,
-                                                       parent_name=self.parent_name,
-                                                       default=self.base, v=v))
         else:
-            digit_str = re.fullmatch(self.regex, v).group(1)
-            if len(digit_str) > 0 and int(digit_str) in [0, 1]:
+            if not re.fullmatch(self.regex, v):
+                is_valid = False
+            else:
+                digit_str = re.fullmatch(self.regex, v).group(1)
+                if len(digit_str) > 0 and int(digit_str) in [0, 1]:
+                    is_valid = False
+                else:
+                    is_valid = True
+
+            if not is_valid:
                 raise ValueError(("The {name} property of {parent_name} must be a string prefixed by '{base}', "
                                   "optionally followed by an integer > 1\n"
                                   "Received '{v}'").format(name=self.name,
                                                            parent_name=self.parent_name,
-                                                           default=self.base, v=v))
+                                                           base=self.base, v=v))
         return v
 
 

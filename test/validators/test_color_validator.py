@@ -28,6 +28,16 @@ def test_acceptance(val, validator: ColorValidator):
         assert validator.validate_coerce(val) == val
 
 
+# ### Rejection by type ###
+@pytest.mark.parametrize('val',
+                         [set(), {}, ['red'], [12]])
+def test_rejection(val, validator: ColorValidator):
+    with pytest.raises(ValueError) as validation_failure:
+        validator.validate_coerce(val)
+
+    assert 'must be a string or a number' in str(validation_failure.value)
+
+
 # ### Rejection by value ###
 @pytest.mark.parametrize('val',
                          ['redd', 'rgbbb(255, 0, 0)', 'hsl(0, 1%0000%, 50%)'])
