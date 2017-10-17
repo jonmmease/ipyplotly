@@ -54,7 +54,7 @@ class DataArrayValidator(BaseValidator):
         elif DataArrayValidator.is_array(v):
             v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v)
         else:
-            raise ValueError(("The {name} property of {parent_name} must be array like. "
+            raise ValueError(("The {name} property of {parent_name} must be an array. "
                               "Received value of type {typ}").format(name=self.name,
                                                                      parent_name=self.parent_name,
                                                                      typ=type(v)))
@@ -62,7 +62,7 @@ class DataArrayValidator(BaseValidator):
 
     @staticmethod
     def is_array(v):
-        return isinstance(v, (list, type)) or (isinstance(v, np.ndarray) and v.ndim == 1)
+        return isinstance(v, (list, tuple)) or (isinstance(v, np.ndarray) and v.ndim == 1)
 
     @staticmethod
     def copy_to_contiguous_readonly_numpy_array(v, dtype=None, force_numeric=False):

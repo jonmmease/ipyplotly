@@ -150,7 +150,7 @@ def test_coercion_aok(in_val, coerce_val, validator_extra_aok):
 
 # ### Rejection by type ###
 @pytest.mark.parametrize('val',
-                         [21, (), set(), {}])
+                         [21, set(), {}])
 def test_rejection_aok_type(val, validator_extra_aok: FlaglistValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_extra_aok.validate_coerce(val)
