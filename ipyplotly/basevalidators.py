@@ -887,7 +887,7 @@ class AnyValidator(BaseValidator):
         if v is None:
             # Pass None through
             pass
-        if self.array_ok and DataArrayValidator.is_array(v):
+        elif self.array_ok and DataArrayValidator.is_array(v):
             v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v, dtype='object')
 
         return v

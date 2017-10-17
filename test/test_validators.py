@@ -1,9 +1,5 @@
 # TODO: Test remaining validators
 
-# AngleValidator
-# ==============
-
-
 # AnyValidator
 # ============
 
