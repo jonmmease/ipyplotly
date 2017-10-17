@@ -948,6 +948,14 @@ class InfoArrayValidator(BaseValidator):
                                                                                   in_cls=type(v),
                                                                                   in_N=len(v),
                                                                                   v=v))
+        elif self.free_length and len(v) > len(self.item_validators):
+            raise ValueError(('The {name} property of {parent_name} must be a list or tuple of length {N} or less.\n'
+                              'Received a {in_cls} of length {in_N}: {v}').format(name=self.name,
+                                                                                  parent_name=self.parent_name,
+                                                                                  N=len(self.item_validators),
+                                                                                  in_cls=type(v),
+                                                                                  in_N=len(v),
+                                                                                  v=v))
         else:
             # We have a list or tuple of the correct length
             v = list(v)
@@ -955,7 +963,7 @@ class InfoArrayValidator(BaseValidator):
                 # Validate coerce elements
                 v[i] = validator.validate_coerce(el)
 
-        return v
+        return tuple(v)
 
 
 class ImageUriValidator(BaseValidator):

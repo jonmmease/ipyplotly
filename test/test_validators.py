@@ -1,9 +1,5 @@
 # TODO: Test remaining validators
 
-# SubplotidValidator
-# ==================
-
-
 # InfoArrayValidator
 # ==================
 

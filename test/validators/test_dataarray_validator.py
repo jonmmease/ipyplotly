@@ -2,6 +2,7 @@ import pytest
 from ipyplotly.basevalidators import DataArrayValidator
 import numpy as np
 
+
 # Fixtures
 # --------
 @pytest.fixture()
