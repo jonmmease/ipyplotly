@@ -1007,11 +1007,13 @@ class CompoundValidator(BaseValidator):
 
         elif isinstance(v, dict):
             v = self.data_class(**v)
+
         elif isinstance(v, self.data_class):
             # Leave unchanged
             pass
+
         elif not isinstance(v, str):
-            raise ValueError(("The {name} property of {parent_name} must be a dict or instance of {cls_name}.\n"
+            raise ValueError(("The {name} property of {parent_name} must be a dict or an instance of '{cls_name}'.\n"
                               "Received value of type {typ}").format(name=self.name,
                                                                      parent_name=self.parent_name,
                                                                      cls_name=self.data_class.__name__,
