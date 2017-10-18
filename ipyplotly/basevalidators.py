@@ -661,18 +661,21 @@ class ColorscaleValidator(BaseValidator):
     named_colorscales = ['Greys', 'YlGnBu', 'Greens', 'YlOrRd', 'Bluered', 'RdBu', 'Reds', 'Blues', 'Picnic',
                          'Rainbow', 'Portland', 'Jet', 'Hot', 'Blackbody', 'Earth', 'Electric', 'Viridis']
 
-    valid_colorscale_description = """\
-        Colorscales may be specified as:
-          - A list of 2-element lists where the first element is the normalized color level value 
-            (starting at 0 and ending at 1), and the second item is a valid color string. 
-            (e.g. [[0.5, 'red'], [1.0, 'blue']])
-          - One of the following named colorscales:
-                ['Greys', 'YlGnBu', 'Greens', 'YlOrRd', 'Bluered', 'RdBu', 'Reds', 'Blues', 'Picnic', 
-                 'Rainbow', 'Portland', 'Jet', 'Hot', 'Blackbody', 'Earth', 'Electric', 'Viridis']
-        """
-
     def __init__(self, name, parent_name, **_):
         super().__init__(name=name, parent_name=parent_name)
+
+    def description(self):
+        desc = """\
+    The '{name}' property is a colorscale and may be specified as:
+      - A list of 2-element lists where the first element is the normalized color level value 
+        (starting at 0 and ending at 1), and the second item is a valid color string. 
+        (e.g. [[0.5, 'red'], [1.0, 'rgb(0, 0, 255)']])
+      - One of the following named colorscales:
+            ['Greys', 'YlGnBu', 'Greens', 'YlOrRd', 'Bluered', 'RdBu', 'Reds', 'Blues', 'Picnic', 
+             'Rainbow', 'Portland', 'Jet', 'Hot', 'Blackbody', 'Earth', 'Electric', 'Viridis']
+        """.format(name=self.name)
+
+        return desc
 
     def validate_coerce(self, v):
         v_valid = False
@@ -703,12 +706,7 @@ class ColorscaleValidator(BaseValidator):
                 v = tuple([tuple([e[0], ColorValidator.perform_validate_coerce(e[1])]) for e in v])
 
         if not v_valid:
-            raise ValueError(("The {name} property of {parent_name} must be a valid colorscale.\n"
-                              "    Received value: {v}\n"
-                              "{valid_desc}").format(name=self.name,
-                                                     parent_name=self.parent_name,
-                                                     v=v,
-                                                     valid_desc=ColorscaleValidator.valid_colorscale_description))
+            self.raise_invalid_val(v)
         return v
 
 
@@ -725,16 +723,20 @@ class AngleValidator(BaseValidator):
     def __init__(self, name, parent_name, **_):
         super().__init__(name=name, parent_name=parent_name)
 
+    def description(self):
+        desc = """\
+    The '{name}' property is a angle (in degrees) that may be specified as a number between -180 and 180.
+    Numeric values outside this range are converted to the equivalent value (e.g. 270 is converted to -90).
+        """.format(name=self.name)
+
+        return desc
+
     def validate_coerce(self, v):
         if v is None:
             # Pass None through
             pass
         elif not isinstance(v, numbers.Number):
-            raise ValueError(("The {name} property of {parent_name} must be a number."
-                              "Received value of type {typ}: {v}").format(name=self.name,
-                                                                          parent_name=self.parent_name,
-                                                                          typ=type(v),
-                                                                          v=repr(v)))
+            self.raise_invalid_val(v)
         else:
             # Normalize v onto the interval [-180, 180)
             v = (v + 180) % 360 - 180

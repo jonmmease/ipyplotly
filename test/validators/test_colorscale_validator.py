@@ -65,7 +65,7 @@ def test_rejection_type(val, validator: ColorscaleValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert 'must be a valid colorscale.' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # ### Rejection by string value ###
@@ -76,13 +76,13 @@ def test_rejection_str_value(val, validator: ColorscaleValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert 'must be a valid colorscale.' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # ### Rejection by array ###
 @pytest.mark.parametrize('val', [
     [0, 'red'],                                     # Elements must be tuples
-    [[0.1, 'rgb(255,0,0)', None], (0.3,'green')],   # length 3 element
+    [[0.1, 'rgb(255,0,0)', None], (0.3, 'green')],   # length 3 element
     ([1.1, 'purple'], [0.2, 'yellow']),             # Number > 1
     ([0.1, 'purple'], [-0.2, 'yellow']),            # Number < 0
     ([0.1, 'purple'], [0.2, 123]),                  # Color not a string
@@ -92,4 +92,4 @@ def test_rejection_array(val, validator: ColorscaleValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert 'must be a valid colorscale.' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
