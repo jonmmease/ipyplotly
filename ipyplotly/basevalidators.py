@@ -1022,7 +1022,7 @@ class CompoundValidator(BaseValidator):
         return v
 
 
-class ArrayValidator(BaseValidator):
+class CompoundArrayValidator(BaseValidator):
     def __init__(self, name, parent_name, element_class):
         super().__init__(name=name, parent_name=parent_name)
         self.data_class = element_class
@@ -1051,7 +1051,7 @@ class ArrayValidator(BaseValidator):
 
         elif not isinstance(v, str):
             raise ValueError(("The {name} property of {parent_name} must be a list or tuple "
-                              "of {cls_name} instances.\n"
+                              "of '{cls_name}' instances.\n"
                               "Received value of type {typ}").format(name=self.name,
                                                                      parent_name=self.parent_name,
                                                                      cls_name=self.data_class.__name__,
