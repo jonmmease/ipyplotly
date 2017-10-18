@@ -1081,17 +1081,24 @@ class BaseTracesValidator:
                     else:
                         trace_type = 'scatter'
 
+                    if trace_type not in self.class_map:
+                        raise ValueError(("Unknown trace type '{trace_type}'.\n"
+                                         "Supported trace types: {trace_types}")
+                                         .format(trace_type=trace_type,
+                                                 trace_types=', '.join(self.class_map.keys())))
+
                     trace = self.class_map[trace_type](**v_el)
                     res.append(trace)
                 else:
                     raise ValueError(("The traces property of a Figure must be a list or tuple "
                                       "of traces.\n"
-                                      "Received {col_typ} with an instance of type {typ}"
+                                      "Received {col_type} with an instance of type {typ}"
                                       ).format(col_type=type(v),
                                                typ=type(v_el)))
             v = tuple(res)
 
-            # Add UIDs if not set
+            # Add UIDs if not set.
+            # If UID is set then it's the users responsibility to make sure UIDs are unique
             for trace in v:
                 if trace.uid is None:
                     trace.uid = str(uuid.uuid1())
