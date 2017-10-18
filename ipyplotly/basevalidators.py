@@ -1,36 +1,100 @@
 import base64
 import numbers
-import collections
-import pathlib
 import textwrap
 import uuid
 
 import io
 import numpy as np
 import re
-# Notes: These become base validator classes, one for each value type. The code-gen validators for primitive types
-# subclass these (hand written) base validator types. compound validators are composed of other compound validators
-# and primitive validators
-#
-# The code gen process will input a property json specification and produce source code for:
-#  - a validator class.
-#  - A data class for compound types. These hold references to validators for all of their properties
-#
-# I write a TraceObjBase class that implements the idea of receiving and passing restyle events up the chain
-# I write a FigureBase that has current figure logic
-#
-# I code gen the figure subclass that has all of the add_scatter, add_bar, etc. methods.
-#
-# I think that's all of the code gen tasks. Validators, Data Classes, and Figure methods
 from PIL import Image
 
+
+# Utility functions
+# -----------------
+def copy_to_contiguous_readonly_numpy_array(v, dtype=None, force_numeric=False):
+
+    # Copy to numpy array and handle dtype param
+    # ------------------------------------------
+    # If dtype was not specified then it will be passed to the numpy array constructor as None and the data type
+    # will be inferred automatically
+    if not isinstance(v, np.ndarray):
+        new_v = np.array(v, order='C', dtype=dtype)
+    else:
+        new_v = v.astype(dtype, order='C')
+
+    # Handle force numeric param
+    # --------------------------
+    if force_numeric and new_v.dtype.kind not in ['u', 'i', 'f']:  # (un)signed int, or float
+        raise ValueError('Input value is not numeric and force_numeric parameter set to True')
+
+    if dtype != 'unicode':
+        # Force non-numeric arrays to have object type
+        # --------------------------------------------
+        # Here we make sure that non-numeric arrays have the object datatype. This works around cases like
+        # np.array([1, 2, '3']) where numpy converts the integers to strings and returns array of dtype '<U21'
+        if new_v.dtype.kind not in ['u', 'i', 'f', 'O']:  # (un)signed int, float, or object
+            new_v = np.array(v, dtype='object')
+
+    # Convert int64 arrays to int32
+    # -----------------------------
+    # JavaScript doesn't support int64 typed arrays
+    if new_v.dtype == 'int64':
+        new_v = new_v.astype('int32')
+
+    # Set new array to be read-only
+    # -----------------------------
+    new_v.flags['WRITEABLE'] = False
+
+    return new_v
+
+
+def is_array(v):
+    return isinstance(v, (list, tuple)) or (isinstance(v, np.ndarray) and v.ndim == 1)
+
+
+# Validators
+# ----------
 class BaseValidator:
     def __init__(self, name, parent_name):
         self.parent_name = parent_name
         self.name = name
 
     def validate_coerce(self, v):
-        raise NotImplemented()
+        raise NotImplementedError()
+
+    def description(self):
+        """Returns a string that describes the values that are acceptable to the validator.
+
+        Should start with:
+            The '{name}' property is a...
+
+        For consistancy, string should have leading 4-space indent
+        """
+        raise NotImplementedError()
+
+    def raise_invalid_val(self, v):
+        raise ValueError(
+            ("\n"
+             "    Invalid value of type {typ} received for the '{name}' property of {parent_name}\n"
+             "        Received value: {v}\n\n"
+             "{vald_clr_desc}\n"
+             ).format(name=self.name,
+                      parent_name=self.parent_name,
+                      typ=type(v),
+                      v=repr(v),
+                      vald_clr_desc=self.description()))
+
+    def raise_invalid_elements(self, invalid_els):
+        if invalid_els:
+            raise ValueError(
+                ("\n"
+                 "    Invalid element(s) received for the '{name}' property of {parent_name}\n"
+                 "        Invalid elements include: {invalid}\n\n"
+                 "{vald_clr_desc}\n"
+                 ).format(name=self.name,
+                          parent_name=self.parent_name,
+                          invalid=invalid_els[:10],
+                          vald_clr_desc=self.description()))
 
 
 class DataArrayValidator(BaseValidator):
@@ -43,63 +107,25 @@ class DataArrayValidator(BaseValidator):
             ]
         },
     """
+
     def __init__(self, name, parent_name, **_):
         super().__init__(name=name, parent_name=parent_name)
+
+    def description(self):
+        return ("""\
+    The '{name}' property is an array that may be specified as a tuple, list, or one-dimensional numpy array"""
+                .format(name=self.name))
 
     def validate_coerce(self, v):
 
         if v is None:
             # Pass None through
             pass
-        elif DataArrayValidator.is_array(v):
-            v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v)
+        elif is_array(v):
+            v = copy_to_contiguous_readonly_numpy_array(v)
         else:
-            raise ValueError(("The {name} property of {parent_name} must be an array. "
-                              "Received value of type {typ}").format(name=self.name,
-                                                                     parent_name=self.parent_name,
-                                                                     typ=type(v)))
+            self.raise_invalid_val(v)
         return v
-
-    @staticmethod
-    def is_array(v):
-        return isinstance(v, (list, tuple)) or (isinstance(v, np.ndarray) and v.ndim == 1)
-
-    @staticmethod
-    def copy_to_contiguous_readonly_numpy_array(v, dtype=None, force_numeric=False):
-
-        # Copy to numpy array and handle dtype param
-        # ------------------------------------------
-        # If dtype was not specified then it will be passed to the numpy array constructor as None and the data type
-        # will be inferred automatically
-        if not isinstance(v, np.ndarray):
-            new_v = np.array(v, order='C', dtype=dtype)
-        else:
-            new_v = v.astype(dtype, order='C')
-
-        # Handle force numeric param
-        # --------------------------
-        if force_numeric and new_v.dtype.kind not in ['u', 'i', 'f']:  # (un)signed int, or float
-            raise ValueError('Input value is not numeric and force_numeric parameter set to True')
-
-        if dtype != 'unicode':
-            # Force non-numeric arrays to have object type
-            # --------------------------------------------
-            # Here we make sure that non-numeric arrays have the object datatype. This works around cases like
-            # np.array([1, 2, '3']) where numpy converts the integers to strings and returns array of dtype '<U21'
-            if new_v.dtype.kind not in ['u', 'i', 'f', 'O']:  # (un)signed int, float, or object
-                new_v = np.array(v, dtype='object')
-
-        # Convert int64 arrays to int32
-        # -----------------------------
-        # JavaScript doesn't support int64 typed arrays
-        if new_v.dtype == 'int64':
-            new_v = new_v.astype('int32')
-
-        # Set new array to be read-only
-        # -----------------------------
-        new_v.flags['WRITEABLE'] = False
-
-        return new_v
 
 
 class EnumeratedValidator(BaseValidator):
@@ -134,6 +160,45 @@ class EnumeratedValidator(BaseValidator):
 
         self.array_ok = array_ok
 
+    def description(self):
+
+        # Separate regular values from regular expressions
+        enum_vals = []
+        enum_regexs = []
+        for v, regex in zip(self.values, self.val_regexs):
+            if regex is not None:
+                enum_regexs.append(regex.pattern)
+            else:
+                enum_vals.append(v)
+
+        desc = """\
+    The '{name}' property is an enumeration that may be specified as:""".format(name=self.name)
+
+        if enum_vals:
+            enum_vals_str = '\n'.join(textwrap.wrap(repr(enum_vals),
+                                                    subsequent_indent=' ' * 12,
+                                                    break_on_hyphens=False))
+
+            desc = desc + """
+      - One of the following enumeration values:
+            {enum_vals_str}""".format(enum_vals_str=enum_vals_str)
+
+
+        if enum_regexs:
+            enum_regexs_str = '\n'.join(textwrap.wrap(repr(enum_regexs),
+                                                    subsequent_indent=' ' * 12,
+                                                    break_on_hyphens=False))
+
+            desc = desc + """
+      - A string that matches one of the following regular expressions:
+            {enum_vals_str}""".format(enum_vals_str=enum_regexs_str)
+
+        if self.array_ok:
+            desc = desc + """
+      - A tuple, list, or one-dimensional numpy array of the above"""
+
+        return desc
+
     def in_values(self, e):
         is_str = isinstance(e, str)
         for v, regex in zip(self.values, self.val_regexs):
@@ -151,38 +216,15 @@ class EnumeratedValidator(BaseValidator):
         if v is None:
             # Pass None through
             pass
-        elif self.array_ok and DataArrayValidator.is_array(v):
+        elif self.array_ok and is_array(v):
             invalid_els = [e for e in v if (not self.in_values(e))]
             if invalid_els:
-                valid_str = '\n'.join(textwrap.wrap(repr(self.values),
-                                                    subsequent_indent=' ' * 8,
-                                                    break_on_hyphens=False))
+                self.raise_invalid_elements(invalid_els)
 
-                raise ValueError(('Invalid enumeration element(s) received for {name} property of {parent_name}.\n'
-                                  '    Invalid elements include: {invalid_els}\n'
-                                  '    Valid values are:\n'
-                                  '        {valid_str}').format(
-                    name=self.name,
-                    parent_name=self.parent_name,
-                    invalid_els=invalid_els[:10],
-                    valid_str=valid_str
-                ))
-            v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v)
+            v = copy_to_contiguous_readonly_numpy_array(v)
         else:
             if not self.in_values(v):
-                valid_str = '\n'.join(textwrap.wrap(repr(self.values),
-                                                    subsequent_indent=' ' * 8,
-                                                    break_on_hyphens=False))
-                raise ValueError(
-                    ('Invalid enumeration value received for {name} property of {parent_name}: "{v}"\n' +
-                     '    Valid values are:\n'
-                     '        {valid_str}').format(
-                        v=v,
-                        name=self.name,
-                        parent_name=self.parent_name,
-                        valid_str=valid_str
-                    ))
-
+                self.raise_invalid_val(v)
         return v
 
 
@@ -199,16 +241,18 @@ class BooleanValidator(BaseValidator):
     def __init__(self, name, parent_name, **_):
         super().__init__(name=name, parent_name=parent_name)
 
+    def description(self):
+        return ("""\
+    The '{name}' property must be specified as a bool (either True, or False)"""
+                .format(name=self.name))
+
     def validate_coerce(self, v):
         if v is None:
             # Pass None through
             pass
         elif not isinstance(v, bool):
-            raise ValueError(("The {name} property of {parent_name} must be a bool. "
-                              "Received value of type {typ}: {v}").format(name=self.name,
-                                                                          parent_name=self.parent_name,
-                                                                          typ=type(v),
-                                                                          v=repr(v)))
+            self.raise_invalid_val(v)
+
         return v
 
 
@@ -244,19 +288,36 @@ class NumberValidator(BaseValidator):
 
         self.array_ok = array_ok
 
+    def description(self):
+        desc = """\
+    The '{name}' property is a number and may be specified as:""".format(name=self.name)
+
+        if self.min_val is None and self.max_val is None:
+            desc = desc + """
+      - An int or float"""
+
+        else:
+            desc = desc + """
+      - An int or float in the interval [{min_val}, {max_val}]""".format(
+                min_val=self.min_val,
+                max_val=self.max_val)
+
+        if self.array_ok:
+            desc = desc + """
+      - A tuple, list, or one-dimensional numpy array of the above"""
+
+        return desc
+
     def validate_coerce(self, v):
         if v is None:
             # Pass None through
             pass
-        elif self.array_ok and DataArrayValidator.is_array(v):
+        elif self.array_ok and is_array(v):
 
             try:
-                v_array = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v, force_numeric=True)
+                v_array = copy_to_contiguous_readonly_numpy_array(v, force_numeric=True)
             except ValueError as ve:
-                raise ValueError(('All elements of the {name} property of {parent_name} must be numbers.\n'
-                                  '    Error: {msg}').format(name=self.name,
-                                                             parent_name=self.parent_name,
-                                                             msg=ve.args[0]))
+                self.raise_invalid_val(v)
 
             v_valid = np.ones(v_array.shape, dtype='bool')
             if self.min_val is not None:
@@ -268,29 +329,17 @@ class NumberValidator(BaseValidator):
             if not np.all(v_valid):
                 # Grab up to the first 10 invalid values
                 some_invalid_els = np.array(v, dtype='object')[np.logical_not(v_valid)][:10].tolist()
-                raise ValueError(("All elements of the {name} property of {parent_name} must be in the range "
-                                  "[{min_val}, {max_val}]. \n"
-                                  "    Invalid elements include: {v}").format(name=self.name,
-                                                                              parent_name=self.parent_name,
-                                                                              min_val=self.min_val,
-                                                                              max_val=self.max_val,
-                                                                              v=some_invalid_els))
+                self.raise_invalid_elements(some_invalid_els)
+
             v = v_array  # Always numpy array of float64
         else:
             if not isinstance(v, numbers.Number):
-                raise ValueError(("The {name} property of {parent_name} must be a number. "
-                                  "Received value of type {typ}: {v}").format(name=self.name,
-                                                                              parent_name=self.parent_name,
-                                                                              typ=type(v),
-                                                                              v=repr(v)))
+                self.raise_invalid_val(v)
+
             if (self.min_val is not None and not v >= self.min_val) or \
                     (self.max_val is not None and not v <= self.max_val):
-                raise ValueError(("The {name} property of {parent_name} must be in the range "
-                                  "[{min_val}, {max_val}]. Received: {v}").format(name=self.name,
-                                                                                  parent_name=self.parent_name,
-                                                                                  min_val=self.min_val,
-                                                                                  max_val=self.max_val,
-                                                                                  v=repr(v)))
+
+                self.raise_invalid_val(v)
 
         return v
 
@@ -327,21 +376,36 @@ class IntegerValidator(BaseValidator):
 
         self.array_ok = array_ok
 
+    def description(self):
+        desc = """\
+    The '{name}' property is a integer and may be specified as:""".format(name=self.name)
+
+        if self.min_val is None and self.max_val is None:
+            desc = desc + """
+      - An int (or float that will be cast to an int)"""
+        else:
+            desc = desc + """
+      - An int (or float that will be cast to an int) in the interval [{min_val}, {max_val}]""".format(
+                min_val=self.min_val,
+                max_val=self.max_val)
+
+        if self.array_ok:
+            desc = desc + """
+      - A tuple, list, or one-dimensional numpy array of the above"""
+
+        return desc
+
     def validate_coerce(self, v):
         if v is None:
             # Pass None through
             pass
-        elif self.array_ok and DataArrayValidator.is_array(v):
+        elif self.array_ok and is_array(v):
 
             try:
-                v_array = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v, dtype='int32')
+                v_array = copy_to_contiguous_readonly_numpy_array(v, dtype='int32')
 
             except (ValueError, TypeError, OverflowError) as ve:
-                raise ValueError(('All elements of the {name} property of {parent_name} must be '
-                                  'convertible to integers.\n'
-                                  '    Error: {msg}').format(name=self.name,
-                                                             parent_name=self.parent_name,
-                                                             msg=ve.args[0]))
+                self.raise_invalid_val(v)
 
             v_valid = np.ones(v_array.shape, dtype='bool')
             if self.min_val is not None:
@@ -352,37 +416,23 @@ class IntegerValidator(BaseValidator):
 
             if not np.all(v_valid):
                 invalid_els = np.array(v, dtype='object')[np.logical_not(v_valid)][:10].tolist()
-                raise ValueError(("All elements of the {name} property of {parent_name} must be in the range "
-                                  "[{min_val}, {max_val}]. \n"
-                                  "    Invalid elements include: {v}").format(name=self.name,
-                                                                          parent_name=self.parent_name,
-                                                                          min_val=self.min_val,
-                                                                          max_val=self.max_val,
-                                                                          v=invalid_els))
+                self.raise_invalid_elements(invalid_els)
+
             v = v_array
         else:
             try:
                 if not isinstance(v, numbers.Number):
                     # don't let int() cast strings to ints
-                    raise ValueError('')
+                    self.raise_invalid_val(v)
 
                 v_int = int(v)
             except (ValueError, TypeError, OverflowError) as ve:
-                raise ValueError(("The {name} property of {parent_name} must be a number that can be converted "
-                                  "to an integer.\n"
-                                  "    Received value of type {typ}: {v}").format(name=self.name,
-                                                                                  parent_name=self.parent_name,
-                                                                                  typ=type(v),
-                                                                                  v=repr(v)))
+                self.raise_invalid_val(v)
 
             if (self.min_val is not None and not v >= self.min_val) or \
                     (self.max_val is not None and not v <= self.max_val):
-                raise ValueError(("The {name} property of {parent_name} must be in the range "
-                                  "[{min_val}, {max_val}]. Received: {v}").format(name=self.name,
-                                                                                  parent_name=self.parent_name,
-                                                                                  min_val=self.min_val,
-                                                                                  max_val=self.max_val,
-                                                                                  v=repr(v)))
+                self.raise_invalid_val(v)
+
             v = v_int
 
         return v
@@ -409,74 +459,62 @@ class StringValidator(BaseValidator):
         self.array_ok = array_ok
         self.values = values
 
+    def description(self):
+        desc = """\
+    The '{name}' property is a string and must be specified as:""".format(name=self.name)
+
+        if self.no_blank:
+            desc = desc + """
+      - A non-empty string"""
+        elif self.values:
+            valid_str = '\n'.join(textwrap.wrap(repr(self.values),
+                                                subsequent_indent=' ' * 12,
+                                                break_on_hyphens=False))
+
+            desc = desc + """
+      - One of the following strings: 
+            {valid_str}""".format(valid_str=valid_str)
+        else:
+            desc = desc + """
+      - A string"""
+
+        if self.array_ok:
+            desc = desc + """
+      - A tuple, list, or one-dimensional numpy array of the above"""
+
+        return desc
+
     def validate_coerce(self, v):
         if v is None:
             # Pass None through
             pass
-        elif self.array_ok and DataArrayValidator.is_array(v):
+        elif self.array_ok and is_array(v):
 
             # Make sure all elements are strings. Is there a more efficient way to do this in numpy?
             invalid_els = [e for e in v if not isinstance(e, str)]
             if invalid_els:
-                raise ValueError(('All elements of the {name} property of {parent_name} must be strings\n'
-                                  '    Invalid elements include: {invalid}').format(name=self.name,
-                                                                                    parent_name=self.parent_name,
-                                                                                    invalid=invalid_els[:10]))
+                self.raise_invalid_elements(invalid_els)
 
-            v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v, dtype='unicode')
+            v = copy_to_contiguous_readonly_numpy_array(v, dtype='unicode')
 
             if self.no_blank:
                 invalid_els = v[v == ''][:10].tolist()
                 if invalid_els:
-                    raise ValueError(('Elements of the {name} property of {parent_name} may not be blank\n'
-                                      '    Invalid elements include: {invalid}').format(name=self.name,
-                                                                                        parent_name=self.parent_name,
-                                                                                        invalid=invalid_els[:10]))
+                    self.raise_invalid_elements(invalid_els)
 
             if self.values:
                 invalid_els = v[np.logical_not(np.isin(v, self.values))][:10].tolist()
                 if invalid_els:
-                    valid_str = '\n'.join(textwrap.wrap(repr(self.values),
-                                                        subsequent_indent=' ' * 8,
-                                                        break_on_hyphens=False))
-
-                    raise ValueError(('Invalid string element(s) received for {name} property of {parent_name}\n'
-                                      '    Invalid elements include: {invalid}\n'  
-                                      '    Valid values are:\n'
-                                      '        {valid_str}').format(
-                        name=self.name,
-                        parent_name=self.parent_name,
-                        invalid=invalid_els[:10],
-                        valid_str=valid_str
-                    ))
-
+                    self.raise_invalid_elements(invalid_els)
         else:
             if not isinstance(v, str):
-                raise ValueError(("The {name} property of {parent_name} must be a string. \n"
-                                  "    Received value of type {typ}: {v}").format(name=self.name,
-                                                                                  parent_name=self.parent_name,
-                                                                                  typ=type(v),
-                                                                                  v=v))
+                self.raise_invalid_val(v)
 
             if self.no_blank and len(v) == 0:
-                raise ValueError(("The {name} property of {parent_name} may not be blank.\n"
-                                  "    Received: {v}").format(name=self.name,
-                                                              parent_name=self.parent_name,
-                                                              v=v))
+                self.raise_invalid_val(v)
 
             if self.values and v not in self.values:
-                valid_str = '\n'.join(textwrap.wrap(repr(self.values),
-                                                    subsequent_indent=' ' * 8,
-                                                    break_on_hyphens=False))
-                raise ValueError(
-                    ('Invalid string value "{v}" received for {name} property of {parent_name}\n' +
-                     '    Valid values are:\n'
-                     '        {valid_str}').format(
-                        v=v,
-                        name=self.name,
-                        parent_name=self.parent_name,
-                        valid_str=valid_str
-                    ))
+                self.raise_invalid_val(v)
 
         return v
 
@@ -515,76 +553,75 @@ class ColorValidator(BaseValidator):
         "slateblue", "slategray", "slategrey", "snow", "springgreen", "steelblue", "tan", "teal", "thistle", "tomato",
         "turquoise", "violet", "wheat", "white", "whitesmoke", "yellow", "yellowgreen"]
 
-    valid_color_description = """\
-    Colors may be specified as:
-      - Numbers that will be interpreted as colors according to the current values of colorscale, cmin, and cmax
-      - Hex strings (e.g. '#ff0000')
-      - rgb/rgba strings (e.g. 'rgb(255, 0, 0)')
-      - hsl/hsla strings (e.g. 'hsl(0, 100%, 50%)')
-      - hsv/hsva strings (e.g. 'hsv(0, 100%, 100%)')
-      - Named CSS colors:
-            {clrs}
-    """.format(clrs='\n'.join(textwrap.wrap(', '.join(named_colors), width=80, subsequent_indent=' ' * 12)))
-
-    def __init__(self, name, parent_name, array_ok=False, **_):
+    def __init__(self, name, parent_name, array_ok=False, colorscale_path=None, **_):
         super().__init__(name=name, parent_name=parent_name)
+        self.colorscale_path = colorscale_path
         self.array_ok = array_ok
+
+    def numbers_allowed(self):
+        return self.colorscale_path is not None
+
+    def description(self):
+
+        named_clrs_str = '\n'.join(textwrap.wrap(', '.join(self.named_colors), width=80, subsequent_indent=' ' * 12))
+
+        valid_color_description = """\
+    The '{name}' property is a color and may be specified as:  
+      - A hex string (e.g. '#ff0000')
+      - An rgb/rgba string (e.g. 'rgb(255,0,0)')
+      - An hsl/hsla string (e.g. 'hsl(0,100%,50%)')
+      - An hsv/hsva string (e.g. 'hsv(0,100%,100%)')
+      - A named CSS color:
+            {clrs}""".format(
+            name=self.name,
+            clrs=named_clrs_str)
+
+        if self.colorscale_path:
+            valid_color_description = valid_color_description + """
+      - A number that will be interpreted as a color according to {colorscale_path}""".format(
+                colorscale_path=self.colorscale_path)
+
+        if self.array_ok:
+            valid_color_description = valid_color_description + """
+      - A list or array of any of the above"""
+
+        return valid_color_description
 
     def validate_coerce(self, v):
         if v is None:
             # Pass None through
             pass
-        elif self.array_ok and DataArrayValidator.is_array(v):
-            v_array = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v)
-            if v_array.dtype.kind in ['u', 'i', 'f']:  # (un)signed int or float
+        elif self.array_ok and is_array(v):
+            v_array = copy_to_contiguous_readonly_numpy_array(v)
+            if self.numbers_allowed() and v_array.dtype.kind in ['u', 'i', 'f']:  # (un)signed int or float
                 # All good
                 v = v_array
             else:
-                # ### Check that strings are valid colors ###
-                invalid_els = [e for e in v if not isinstance(e, (str, numbers.Number))]
-                if invalid_els:
-                    raise ValueError(('All elements of the {name} property of {parent_name} must be strings or '
-                                      'numbers\n'
-                                      '    Invalid elements include: {invalid}').format(name=self.name,
-                                                                                        parent_name=self.parent_name,
-                                                                                        invalid=invalid_els[:10]))
+                validated_v = [ColorValidator.perform_validate_coerce(e, allow_number=self.numbers_allowed())
+                               for e in v]
 
-                validated_v = [ColorValidator.perform_validate_coerce(e) for e in v]
                 invalid_els = [el for el, validated_el in zip(v, validated_v) if validated_el is None]
-
                 if invalid_els:
-                    raise ValueError(('All elements of the {name} property of {parent_name} must be numbers or valid '
-                                      'colors\n'
-                                      '    Invalid elements include: {invalid}\n'
-                                      '{vald_clr_desc}').format(name=self.name,
-                                                                parent_name=self.parent_name,
-                                                                invalid=invalid_els[:10],
-                                                                vald_clr_desc=ColorValidator.valid_color_description))
+                    self.raise_invalid_elements(invalid_els)
 
-                v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(validated_v, dtype='unicode')
+                # ### Check that elements have valid colors types ###
+                if self.numbers_allowed():
+                    v = copy_to_contiguous_readonly_numpy_array(validated_v, dtype='object')
+                else:
+                    v = copy_to_contiguous_readonly_numpy_array(validated_v, dtype='unicode')
 
         else:
-            if not isinstance(v, (str, numbers.Number)):
-                raise ValueError(("The {name} property of {parent_name} must be a string or a number.\n"
-                                  "    Received value of type {typ}").format(name=self.name,
-                                                                             parent_name=self.parent_name,
-                                                                             typ=type(v)))
-
-            validated_v = ColorValidator.perform_validate_coerce(v)
+            # Validate scalar color
+            validated_v = ColorValidator.perform_validate_coerce(v, allow_number=self.numbers_allowed())
             if validated_v is None:
-                raise ValueError(("The {name} property of {parent_name} must be a valid color.\n"
-                                  "    Received: {v}\n"
-                                  "{vald_clr_desc}\n"
-                                  "").format(name=self.name,
-                                             parent_name=self.parent_name,
-                                             v=v,
-                                             vald_clr_desc=ColorValidator.valid_color_description))
+                self.raise_invalid_val(v)
+
             v = validated_v
 
         return v
 
     @staticmethod
-    def perform_validate_coerce(v, allow_number=True):
+    def perform_validate_coerce(v, allow_number=None):
 
         if isinstance(v, numbers.Number) and allow_number:
             # If allow_numbers then any number is ok
@@ -608,29 +645,6 @@ class ColorValidator(BaseValidator):
             else:
                 # Not a valid color
                 return None
-
-    # @staticmethod
-    # def is_valid_color(v: str, allow_number=True):
-    #
-    #     if isinstance(v, numbers.Number) and allow_number:
-    #         return True
-    #
-    #     # Remove spaces so regexes don't need to bother with them.
-    #     v = v.replace(' ', '')
-    #     v = v.lower()
-    #
-    #     if ColorValidator.re_hex.fullmatch(v):
-    #         # valid hex color (e.g. #f34ab3)
-    #         return True
-    #     elif ColorValidator.re_rgb_etc.fullmatch(v):
-    #         # Valid rgb(a), hsl(a), hsv(a) color (e.g. rgba(10, 234, 200, 50%)
-    #         return True
-    #     elif v in ColorValidator.named_colors:
-    #         # Valid named color (e.g. 'coral')
-    #         return True
-    #     else:
-    #         # Not a valid color
-    #         return False
 
 
 class ColorscaleValidator(BaseValidator):
@@ -674,9 +688,9 @@ class ColorscaleValidator(BaseValidator):
                 v_valid = True
                 v = v_match[0]
 
-        elif DataArrayValidator.is_array(v) and len(v) > 0:
+        elif is_array(v) and len(v) > 0:
             invalid_els = [e for e in v
-                           if not DataArrayValidator.is_array(e) or
+                           if not is_array(e) or
                            len(e) != 2 or
                            not isinstance(e[0], numbers.Number) or
                            not (0 <= e[0] <= 1) or
@@ -820,7 +834,7 @@ class FlaglistValidator(BaseValidator):
         if v is None:
             # Pass None through
             pass
-        elif self.array_ok and DataArrayValidator.is_array(v):
+        elif self.array_ok and is_array(v):
             invalid_els = [e for e in v if not isinstance(e, str)]
             if invalid_els:
                 raise ValueError(('All elements of the {name} property of {parent_name} must be strings.\n'
@@ -841,7 +855,7 @@ class FlaglistValidator(BaseValidator):
                     valid_desc=self.valid_description
                 ))
 
-            v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(validated_v, dtype='unicode')
+            v = copy_to_contiguous_readonly_numpy_array(validated_v, dtype='unicode')
         else:
 
             if not isinstance(v, str):
@@ -889,8 +903,8 @@ class AnyValidator(BaseValidator):
         if v is None:
             # Pass None through
             pass
-        elif self.array_ok and DataArrayValidator.is_array(v):
-            v = DataArrayValidator.copy_to_contiguous_readonly_numpy_array(v, dtype='object')
+        elif self.array_ok and is_array(v):
+            v = copy_to_contiguous_readonly_numpy_array(v, dtype='object')
 
         return v
 

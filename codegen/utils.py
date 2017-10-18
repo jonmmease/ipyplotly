@@ -231,7 +231,7 @@ class PlotlyNode:
         while nodes_to_process:
             node = nodes_to_process.pop()
 
-            if not node.is_array:
+            if not is_array:
                 nodes.append(node)
 
             nodes_to_process.extend(node.child_compound_datatypes)

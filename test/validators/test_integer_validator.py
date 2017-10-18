@@ -53,7 +53,7 @@ def test_rejection_by_value(val, validator: IntegerValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert 'must be a number that can be converted to an integer' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # ### With min/max ###
@@ -70,7 +70,7 @@ def test_rejection_min_max(val, validator_min_max: IntegerValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_min_max.validate_coerce(val)
 
-    assert 'must be in the range [-1, 2]' in str(validation_failure.value)
+    assert 'in the interval [-1, 2]' in str(validation_failure.value)
 
 
 # ### With min only ###
@@ -87,7 +87,7 @@ def test_rejection_min(val, validator_min: IntegerValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_min.validate_coerce(val)
 
-    assert 'must be in the range [-1, 2147483647]' in str(validation_failure.value)
+    assert 'in the interval [-1, 2147483647]' in str(validation_failure.value)
 
 
 # ### With max only ###
@@ -104,7 +104,7 @@ def test_rejection_max(val, validator_max: IntegerValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_max.validate_coerce(val)
 
-    assert 'must be in the range [-2147483648, 2]' in str(validation_failure.value)
+    assert 'in the interval [-2147483648, 2]' in str(validation_failure.value)
 
 
 # Array ok
@@ -144,7 +144,7 @@ def test_integer_validator_rejection_aok(val, validator_aok: IntegerValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_aok.validate_coerce(val)
 
-    assert 'must be convertible to integers' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # ### Rejection by element ###
@@ -154,4 +154,4 @@ def test_rejection_aok_min_max(val, validator_aok: IntegerValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_aok.validate_coerce(val)
 
-    assert 'must be in the range [-2, 10]' in str(validation_failure.value)
+    assert 'in the interval [-2, 10]' in str(validation_failure.value)

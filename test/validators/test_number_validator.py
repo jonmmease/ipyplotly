@@ -48,7 +48,7 @@ def test_rejection_by_value(val, validator: NumberValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert 'must be a number' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # ### With min/max ###
@@ -64,7 +64,7 @@ def test_rejection_min_max(val, validator_min_max: NumberValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_min_max.validate_coerce(val)
 
-    assert 'must be in the range [-1.0, 2.0]' in str(validation_failure.value)
+    assert 'in the interval [-1.0, 2.0]' in str(validation_failure.value)
 
 
 # ### With min only ###
@@ -80,7 +80,7 @@ def test_rejection_min(val, validator_min: NumberValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_min.validate_coerce(val)
 
-    assert 'must be in the range [-1.0, inf]' in str(validation_failure.value)
+    assert 'in the interval [-1.0, inf]' in str(validation_failure.value)
 
 
 # ### With max only ###
@@ -96,7 +96,7 @@ def test_rejection_max(val, validator_max: NumberValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_max.validate_coerce(val)
 
-    assert 'must be in the range [-inf, 2.0]' in str(validation_failure.value)
+    assert 'in the interval [-inf, 2.0]' in str(validation_failure.value)
 
 
 # Array ok
@@ -135,7 +135,7 @@ def test_rejection_aok(val, validator_aok: NumberValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_aok.validate_coerce(val)
 
-    assert 'must be numbers' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # ### Rejection by element ###
@@ -146,4 +146,5 @@ def test_rejection_aok_min_max(val, validator_aok: NumberValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_aok.validate_coerce(val)
 
-    assert 'must be in the range [-1, 1.5]' in str(validation_failure.value)
+    assert 'Invalid element(s)' in str(validation_failure.value)
+    assert 'in the interval [-1, 1.5]' in str(validation_failure.value)

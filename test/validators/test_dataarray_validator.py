@@ -30,4 +30,4 @@ def test_rejection(val, validator: DataArrayValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert 'must be an array' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)

@@ -153,4 +153,6 @@ def test_validator_rejection_number3_length(val, first_invalid_ind, validator_nu
     with pytest.raises(ValueError) as validation_failure:
         validator_number3_free.validate_coerce(val)
 
-    assert 'The prop[%d] property of parent must be a number.' % first_invalid_ind in str(validation_failure.value)
+    assert ("Invalid value of type {typ} received for the 'prop[{first_invalid_ind}]' property of parent"
+            .format(typ=type(val[first_invalid_ind]),
+                    first_invalid_ind=first_invalid_ind)) in str(validation_failure.value)

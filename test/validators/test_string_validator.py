@@ -51,7 +51,7 @@ def test_rejection(val, validator: StringValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert 'must be a string' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # Valid values
@@ -68,7 +68,7 @@ def test_rejection_values(val, validator_values: StringValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_values.validate_coerce(val)
 
-    assert 'Invalid string value "{val}"'.format(val=val) in str(validation_failure.value)
+    assert 'Invalid value'.format(val=val) in str(validation_failure.value)
     assert "['foo', 'BAR', '']" in str(validation_failure.value)
 
 
@@ -85,7 +85,7 @@ def test_rejection_no_blanks(val, validator_no_blanks: StringValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_no_blanks.validate_coerce(val)
 
-    assert 'may not be blank' in str(validation_failure.value)
+    assert 'A non-empty string' in str(validation_failure.value)
 
 
 # Array ok
@@ -114,7 +114,7 @@ def test_rejection_aok(val, validator_aok: StringValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_aok.validate_coerce(val)
 
-    assert 'must be strings' in str(validation_failure.value)
+    assert 'Invalid element(s)' in str(validation_failure.value)
 
 
 # ### Rejection by value ###
@@ -124,7 +124,7 @@ def test_rejection_aok_values(val, validator_aok_values: StringValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_aok_values.validate_coerce(val)
 
-    assert 'Invalid string element' in str(validation_failure.value)
+    assert 'Invalid element(s)' in str(validation_failure.value)
 
 
 # ### No blanks ###
@@ -144,5 +144,5 @@ def test_rejection_no_blanks_aok(val, validator_no_blanks_aok: StringValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_no_blanks_aok.validate_coerce(val)
 
-    assert 'may not be blank' in str(validation_failure.value)
+    assert 'A non-empty string' in str(validation_failure.value)
 
