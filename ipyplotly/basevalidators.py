@@ -880,7 +880,7 @@ class AnyValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, values=None, array_ok=False):
+    def __init__(self, name, parent_name, values=None, array_ok=False, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.values = values
         self.array_ok = array_ok
@@ -908,7 +908,7 @@ class InfoArrayValidator(BaseValidator):
             ]
         }
     """
-    def __init__(self, name, parent_name, items, free_length=None):
+    def __init__(self, name, parent_name, items, free_length=None, **_):
         super().__init__(name=name, parent_name=parent_name)
         self.items = items
 
@@ -963,11 +963,13 @@ class InfoArrayValidator(BaseValidator):
                 # Validate coerce elements
                 v[i] = validator.validate_coerce(el)
 
-        return tuple(v)
+            v = tuple(v)
+
+        return v
 
 
 class ImageUriValidator(BaseValidator):
-    def __init__(self, name, parent_name):
+    def __init__(self, name, parent_name, **_):
         super().__init__(name=name, parent_name=parent_name)
 
     def validate_coerce(self, v):

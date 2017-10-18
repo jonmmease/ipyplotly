@@ -97,7 +97,7 @@ class PlotlyNode:
     @property
     def datatype(self) -> str:
         if self.is_array_element:
-            return 'array'
+            return 'compound_array'
         elif self.is_compound:
             return 'compound'
         elif self.is_simple:
