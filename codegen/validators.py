@@ -3,9 +3,9 @@ import os.path as opath
 import shutil
 from io import StringIO
 from codegen.utils import format_source, PlotlyNode, TraceNode
-import textwrap
 
 custom_validator_datatypes = {'layout.image.source': 'ImageUri'}
+
 
 def build_validators_py(parent_node: PlotlyNode):
     datatype_nodes = parent_node.child_datatypes
