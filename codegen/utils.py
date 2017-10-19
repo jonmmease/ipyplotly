@@ -1,5 +1,12 @@
+import importlib
+import inspect
+import textwrap
 from typing import List
+
+from io import StringIO
 from yapf.yapflib.yapf_api import FormatCode
+
+from ipyplotly.basevalidators import BaseValidator, CompoundValidator, CompoundArrayValidator
 
 
 def format_source(validator_source):
@@ -9,6 +16,8 @@ def format_source(validator_source):
                                                    'COLUMN_LIMIT': 119})
     return formatted_source
 
+
+custom_validator_datatypes = {'layout.image.source': 'ImageUri'}
 
 class PlotlyNode:
 
@@ -87,6 +96,55 @@ class PlotlyNode:
     @property
     def name_validator(self) -> str:
         return self.name_pascal_case + ('s' if self.is_array_element else '') + 'Validator'
+
+    @property
+    def name_base_validator(self) -> str:
+        if self.dir_str in custom_validator_datatypes:
+            validator_base = f"{custom_validator_datatypes[self.dir_str]}Validator"
+        else:
+            validator_base = f"{self.datatype_pascal_case}Validator"
+
+        return validator_base
+
+    def get_constructor_params_docstring(self, indent=12):
+        assert self.is_compound
+
+        buffer = StringIO()
+        for subtype_node in self.child_datatypes:
+            raw_description = subtype_node.description
+            subtype_description = '\n'.join(textwrap.wrap(raw_description,
+                                                          subsequent_indent=' ' * (indent + 4),
+                                                          width=119 - (indent + 4)))
+
+            buffer.write('\n' + ' ' * indent + subtype_node.name_property)
+            buffer.write('\n' + ' ' * (indent + 4) + subtype_description)
+
+        return buffer.getvalue()
+
+    @property
+    def validator_instance(self) -> BaseValidator:
+        validators_module = importlib.import_module('ipyplotly.basevalidators')
+
+        validator_class_list = [cls
+                                for cls_name, cls in inspect.getmembers(validators_module, inspect.isclass)
+                                if cls.__name__ == self.name_base_validator]
+        if not validator_class_list:
+            raise ValueError(f"Unknown base validator '{self.name_base_validator}'")
+
+        validator_class = validator_class_list[0]
+
+        args = dict(name=self.name_property, parent_name=self.parent_dir_str)
+
+        if validator_class == CompoundValidator:
+            data_class_str = f"ipyplotly.datatypes.{self.parent_dir_str}.{self.name_class}"
+            extra_args = {'data_class': data_class_str, 'data_docs': self.get_constructor_params_docstring()}
+        elif validator_class == CompoundArrayValidator:
+            element_class_str = f"ipyplotly.datatypes.{self.parent_dir_str}.{self.name_class}"
+            extra_args = {'element_class': element_class_str, 'element_docs': self.get_constructor_params_docstring()}
+        else:
+            extra_args = {n.name_undercase: n.node_data for n in self.simple_attrs}
+
+        return validator_class(**args, **extra_args)
 
     @property
     def name_class(self) -> str:
@@ -231,7 +289,7 @@ class PlotlyNode:
         while nodes_to_process:
             node = nodes_to_process.pop()
 
-            if not is_array:
+            if not node.is_array:
                 nodes.append(node)
 
             nodes_to_process.extend(node.child_compound_datatypes)

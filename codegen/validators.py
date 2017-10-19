@@ -22,13 +22,14 @@ def build_validators_py(parent_node: PlotlyNode):
     # -----------------------
     for datatype_node in datatype_nodes:
 
-        if datatype_node.dir_str in custom_validator_datatypes:
-            validator_base = f"bv.{custom_validator_datatypes[datatype_node.dir_str]}Validator"
-        else:
-            validator_base = f"bv.{datatype_node.datatype_pascal_case}Validator"
+        # if datatype_node.dir_str in custom_validator_datatypes:
+        #     validator_base = f"bv.{custom_validator_datatypes[datatype_node.dir_str]}Validator"
+        # else:
+        #     validator_base = f"bv.{datatype_node.datatype_pascal_case}Validator"
+
         buffer.write(f"""
         
-class {datatype_node.name_validator}({validator_base}):
+class {datatype_node.name_validator}(bv.{datatype_node.name_base_validator}):
     def __init__(self, prop_name='{datatype_node.name_property}'):""")
 
         # Add import
@@ -42,10 +43,12 @@ class {datatype_node.name_validator}({validator_base}):
 
         if datatype_node.is_array_element:
             buffer.write(f""",
-                         element_class={datatype_node.name_class}""")
+                         element_class={datatype_node.name_class},
+                         element_docs=\"\"\"{datatype_node.get_constructor_params_docstring()}\"\"\"""")
         elif datatype_node.is_compound:
             buffer.write(f""",
-                         data_class={datatype_node.name_class}""")
+                         data_class={datatype_node.name_class},
+                         data_docs=\"\"\"{datatype_node.get_constructor_params_docstring()}\"\"\"""")
         else:
             assert datatype_node.is_simple
 

@@ -27,7 +27,7 @@ class CompoundType:
 # --------
 @pytest.fixture()
 def validator():
-    return CompoundValidator('prop', 'parent', data_class=CompoundType)
+    return CompoundValidator('prop', 'parent', data_class=CompoundType, data_docs='')
 
 
 # Tests

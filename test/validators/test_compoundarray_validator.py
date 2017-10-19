@@ -31,7 +31,7 @@ class CompoundType:
 # --------
 @pytest.fixture()
 def validator():
-    return CompoundArrayValidator('prop', 'parent', element_class=CompoundType)
+    return CompoundArrayValidator('prop', 'parent', element_class=CompoundType, element_docs='')
 
 
 # Tests

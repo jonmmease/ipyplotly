@@ -55,10 +55,14 @@ def is_array(v):
 
 
 def type_str(v):
+    if isinstance(v, str):
+        return repr(v)
+
     if not isinstance(v, type):
         v = type(v)
 
-    return "'{module}.{name}'".format(module = v.__module__, name = v.__name__)
+    return "'{module}.{name}'".format(module=v.__module__, name=v.__name__)
+
 
 # Validators
 # ----------
@@ -1028,9 +1032,10 @@ class ImageUriValidator(BaseValidator):
 
 
 class CompoundValidator(BaseValidator):
-    def __init__(self, name, parent_name, data_class):
+    def __init__(self, name, parent_name, data_class, data_docs):
         super().__init__(name=name, parent_name=parent_name)
         self.data_class = data_class
+        self.data_docs = data_docs
 
     @staticmethod
     def get_constructor_params_str(data_class):
@@ -1051,20 +1056,25 @@ class CompoundValidator(BaseValidator):
     def description(self):
 
         desc = ("""\
-    The '{name}' property is an instance of {data_class} that may be specified as:
+    The '{name}' property is an instance of {data_class} 
+    that may be specified as:
       - An instance of {data_class}
-      - A dict of string/value properties that will be passed to the {data_class} constructor
+      - A dict of string/value properties that will be passed to the 
+        {data_class} constructor
       
         Supported dict properties:
-            
             {constructor_params_str}"""
                 ).format(name=self.name,
                          data_class=type_str(self.data_class),
-                         constructor_params_str=self.get_constructor_params_str(self.data_class))
+                         constructor_params_str=self.data_docs)
 
         return desc
 
     def validate_coerce(self, v):
+        if isinstance(self.data_class, str):
+            raise ValueError("Invalid data_class of type 'string': {data_class}"
+                             .format(data_class = self.data_class))
+
         if v is None:
             v = self.data_class()
 
@@ -1083,9 +1093,10 @@ class CompoundValidator(BaseValidator):
 
 
 class CompoundArrayValidator(BaseValidator):
-    def __init__(self, name, parent_name, element_class):
+    def __init__(self, name, parent_name, element_class, element_docs):
         super().__init__(name=name, parent_name=parent_name)
         self.data_class = element_class
+        self.data_docs = element_docs
 
     def description(self):
 
@@ -1095,15 +1106,19 @@ class CompoundArrayValidator(BaseValidator):
       - A list or tuple of dicts of string/value properties that will be passed to the {data_class} constructor
 
         Supported dict properties:
-
             {constructor_params_str}"""
                 ).format(name=self.name,
                          data_class=type_str(self.data_class),
-                         constructor_params_str=CompoundValidator.get_constructor_params_str(self.data_class))
+                         constructor_params_str=self.data_docs)
 
         return desc
 
     def validate_coerce(self, v):
+
+        if isinstance(self.data_class, str):
+            raise ValueError("Invalid data_class of type 'string': {data_class}"
+                             .format(data_class = self.data_class))
+
         if v is None:
             v = ()
 

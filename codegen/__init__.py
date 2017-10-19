@@ -21,6 +21,18 @@ if __name__ == '__main__':
     compound_trace_nodes = PlotlyNode.get_all_compound_datatype_nodes(plotly_schema, TraceNode)
     compound_layout_nodes = PlotlyNode.get_all_compound_datatype_nodes(plotly_schema, LayoutNode)
 
+    # Write out validators
+    # --------------------
+    validators_pkgdir = opath.join(outdir, 'validators')
+    if opath.exists(validators_pkgdir):
+        shutil.rmtree(validators_pkgdir)
+
+    for node in compound_layout_nodes:
+        write_validator_py(outdir, node)
+
+    for node in compound_trace_nodes:
+        write_validator_py(outdir, node)
+
     # Write out datatypes
     # -------------------
     datatypes_pkgdir = opath.join(outdir, 'datatypes')
@@ -38,21 +50,10 @@ if __name__ == '__main__':
     base_node = TraceNode(plotly_schema)
     append_figure_class(datatypes_pkgdir, base_node)
 
-    # Write out validators
-    # --------------------
-    validators_pkgdir = opath.join(outdir, 'validators')
-    if opath.exists(validators_pkgdir):
-        shutil.rmtree(validators_pkgdir)
-
-    for node in compound_layout_nodes:
-        write_validator_py(outdir, node)
-
-    for node in compound_trace_nodes:
-        write_validator_py(outdir, node)
-
     # Append traces validator class
     # -----------------------------
     append_traces_validator_py(validators_pkgdir, base_node)
+
 
 
 

@@ -71,12 +71,28 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
             else:
                 prop_type = get_typing_type(subtype_node.datatype)
 
-            raw_description = subtype_node.description
 
-            subtype_description = '\n'.join(textwrap.wrap(raw_description,
-                                                          subsequent_indent=' ' * 8,
-                                                          width=119 - 8))
-            # #### Get property ###
+            # #### Get property description ####
+            raw_description = subtype_node.description
+            property_description = '\n'.join(textwrap.wrap(raw_description,
+                                                           subsequent_indent=' ' * 8,
+                                                           width=119 - 8))
+
+            # #### Get validator description ####
+            validator = subtype_node.validator_instance
+
+            # Remove leading indent and add extra 4 spaces to subsequent indent
+            validator_description = ('\n' + ' ' * 4).join(validator.description().strip().split('\n'))
+
+            # #### Combine to form property docstring ####
+            if property_description.strip():
+                property_docstring = f"""{property_description}  
+                
+        {validator_description}"""
+            else:
+                property_docstring = validator_description
+
+            # #### Write property ###
             buffer.write(f"""\
 
     # {subtype_node.name_property}
@@ -84,7 +100,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
     @property
     def {subtype_node.name_property}(self) -> {prop_type}:
         \"\"\"
-        {subtype_description}
+        {property_docstring}
         \"\"\"
         return self['{subtype_node.name_property}']""")
 
@@ -129,16 +145,6 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
             buffer.write(f"""
         self._validators['{subtype_node.name_property}'] = v_{compound_node.name}.{subtype_node.name_validator}()""")
 
-        compound_subtype_nodes = compound_node.child_compound_datatypes
-        if compound_subtype_nodes:
-            buffer.write(f"""
-        
-        # # Init compound properties
-        # # ------------------------""")
-        #     for compound_subtype_node in compound_subtype_nodes:
-        #         buffer.write(f"""
-        # self._{compound_subtype_node.name_property} = None""")
-
         buffer.write(f"""
         
         # Populate data dict with properties
@@ -181,15 +187,7 @@ def add_docstring(buffer, compound_node):
         
         Parameters
         ----------""")
-    for subtype_node in compound_node.child_datatypes:
-        raw_description = subtype_node.description
-        subtype_description = '\n'.join(textwrap.wrap(raw_description,
-                                                      subsequent_indent=' ' * 12,
-                                                      width=119 - 12))
-
-        buffer.write(f"""
-        {subtype_node.name_property}
-            {subtype_description}""")
+    buffer.write(compound_node.get_constructor_params_docstring(indent=8))
 
     # #### close docstring ####
     buffer.write(f"""
