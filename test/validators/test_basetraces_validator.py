@@ -120,7 +120,7 @@ def test_rejection_type(validator: BaseTracesValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert "must be a list or tuple of traces." in str(validation_failure.value)
+    assert "Invalid value" in str(validation_failure.value)
 
 
 def test_rejection_element_type(validator: BaseTracesValidator):
@@ -129,7 +129,7 @@ def test_rejection_element_type(validator: BaseTracesValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert "must be a list or tuple of traces." in str(validation_failure.value)
+    assert "Invalid element(s)" in str(validation_failure.value)
 
 
 def test_rejection_element_attr(validator: BaseTracesValidator):
@@ -147,4 +147,4 @@ def test_rejection_element_tracetype(validator: BaseTracesValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert "Unknown trace type 'bogus'." in str(validation_failure.value)
+    assert "Invalid element(s)" in str(validation_failure.value)

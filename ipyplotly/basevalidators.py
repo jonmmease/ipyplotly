@@ -4,6 +4,8 @@ import textwrap
 import uuid
 
 import io
+from copy import deepcopy
+
 import numpy as np
 import re
 from PIL import Image
@@ -52,6 +54,12 @@ def is_array(v):
     return isinstance(v, (list, tuple)) or (isinstance(v, np.ndarray) and v.ndim == 1)
 
 
+def type_str(v):
+    if not isinstance(v, type):
+        v = type(v)
+
+    return "'{module}.{name}'".format(module = v.__module__, name = v.__name__)
+
 # Validators
 # ----------
 class BaseValidator:
@@ -80,7 +88,7 @@ class BaseValidator:
              "{vald_clr_desc}\n"
              ).format(name=self.name,
                       parent_name=self.parent_name,
-                      typ=type(v),
+                      typ=type_str(v),
                       v=repr(v),
                       vald_clr_desc=self.description()))
 
@@ -759,14 +767,20 @@ class SubplotidValidator(BaseValidator):
         self.base = dflt
         self.regex = dflt + "(\d*)"
 
+    def description(self):
+
+        desc = """\
+    The '{name}' property is an identifier of a particular subplot, of type '{base}', that 
+    may be specified as the string '{base}' optionally followed by an integer > 1 
+    (e.g. '{base}', '{base}2', '{base}3', etc.)
+        """.format(name=self.name, base=self.base)
+        return desc
+
     def validate_coerce(self, v):
         if v is None:
             v = self.base
         elif not isinstance(v, str):
-            raise ValueError(("The {name} property of {parent_name} must be a string. "
-                              "Received value of type {typ}").format(name=self.name,
-                                                                     parent_name=self.parent_name,
-                                                                     typ=type(v)))
+            self.raise_invalid_val(v)
         else:
             if not re.fullmatch(self.regex, v):
                 is_valid = False
@@ -778,11 +792,7 @@ class SubplotidValidator(BaseValidator):
                     is_valid = True
 
             if not is_valid:
-                raise ValueError(("The {name} property of {parent_name} must be a string prefixed by '{base}', "
-                                  "optionally followed by an integer > 1\n"
-                                  "Received '{v}'").format(name=self.name,
-                                                           parent_name=self.parent_name,
-                                                           base=self.base, v=v))
+                self.raise_invalid_val(v)
         return v
 
 
@@ -808,19 +818,35 @@ class FlaglistValidator(BaseValidator):
 
         self.all_flags = self.flags + self.extras
 
-        if self.extras:
-            extras_line = """\
-      - OR exactly one of {extras} (e.g. '{eg_extra}')""".format(extras=self.extras, eg_extra=self.extras[-1])
-        else:
-            extras_line = ''
+    def description(self):
 
-        self.valid_description = """\
-    Value must be a string containing:
-      - Any combination of {flags} joined with '+' characters (e.g. '{eg_flag}')
-{extras_line}
-        """.format(flags=self.flags, eg_flag='+'.join(self.flags[:2]), extras_line=extras_line)
+        desc = ("""\
+    The '{name}' property is a flaglist and may be specified as a string containing:"""
+                ).format(name=self.name)
+
+        # Flags
+        desc = desc + ("""
+      - Any combination of {flags} joined with '+' characters (e.g. '{eg_flag}')"""
+                       ).format(flags=self.flags,
+                                eg_flag='+'.join(self.flags[:2]))
+
+        # Extras
+        if self.extras:
+            desc = desc + ("""
+        OR exactly one of {extras} (e.g. '{eg_extra}')"""
+                           ).format(extras=self.extras,
+                                    eg_extra=self.extras[-1])
+
+        if self.array_ok:
+            desc = desc  + """
+      - A list or array of the above"""
+
+        return desc
 
     def perform_validate_coerce(self, v):
+        if not isinstance(v, str):
+            return None
+
         split_vals = [e.strip() for e in re.split('[,+]', v)]
 
         all_flags_valid = [f for f in split_vals if f not in self.all_flags] == []
@@ -837,47 +863,19 @@ class FlaglistValidator(BaseValidator):
             # Pass None through
             pass
         elif self.array_ok and is_array(v):
-            invalid_els = [e for e in v if not isinstance(e, str)]
-            if invalid_els:
-                raise ValueError(('All elements of the {name} property of {parent_name} must be strings.\n'
-                                  '    Invalid elements include: {invalid}').format(name=self.name,
-                                                                                    parent_name=self.parent_name,
-                                                                                    invalid=invalid_els[:10]))
 
             validated_v = [self.perform_validate_coerce(e) for e in v]  # Coerce individual strings
 
-            invalid_els = [el is None for el, validated_el in zip(v, validated_v) if validated_el is None]
+            invalid_els = [el for el, validated_el in zip(v, validated_v) if validated_el is None]
             if invalid_els:
-                raise ValueError(('Invalid flaglist element(s) received for {name} property of {parent_name}.\n'
-                                  '    Invalid elements include: {invalid}\n'  
-                                  '{valid_desc}').format(
-                    name=self.name,
-                    parent_name=self.parent_name,
-                    invalid=invalid_els[:10],
-                    valid_desc=self.valid_description
-                ))
+                self.raise_invalid_elements(invalid_els)
 
             v = copy_to_contiguous_readonly_numpy_array(validated_v, dtype='unicode')
         else:
 
-            if not isinstance(v, str):
-                or_array = ' or array of strings' if self.array_ok else ''
-                raise ValueError(("The {name} property of {parent_name} must be a string{or_array}.\n"
-                                  "    Received value of type {typ}").format(name=self.name,
-                                                                             parent_name=self.parent_name,
-                                                                             or_array=or_array,
-                                                                             typ=type(v)))
-
             validated_v = self.perform_validate_coerce(v)
             if validated_v is None:
-                raise ValueError(('Invalid flaglist received for {name} property of {parent_name}.\n'
-                                  '    Received value: {v}\n'
-                                  '{valid_desc}').format(
-                    name=self.name,
-                    parent_name=self.parent_name,
-                    v=repr(v),
-                    valid_desc=self.valid_description
-                ))
+                self.raise_invalid_val(v)
 
             v = validated_v
 
@@ -900,6 +898,13 @@ class AnyValidator(BaseValidator):
         super().__init__(name=name, parent_name=parent_name)
         self.values = values
         self.array_ok = array_ok
+
+    def description(self):
+
+        desc = """\
+    The '{name}' property accepts values of any type
+        """.format(name=self.name)
+        return desc
 
     def validate_coerce(self, v):
         if v is None:
@@ -935,6 +940,21 @@ class InfoArrayValidator(BaseValidator):
 
         self.free_length = free_length
 
+    def description(self):
+        upto = ' up to' if self.free_length else ''
+        desc = """\
+    The '{name}' property is an info array that may be specified as a list or tuple of{upto}
+    {N} elements such that:
+        """.format(name=self.name, upto=upto, N=len(self.item_validators))
+
+        for i, item_validator in enumerate(self.item_validators):
+            el_desc = ('\n' + ' ' * 12).join([line.strip() for line in item_validator.description().split('\n')])
+            desc = desc + """
+      ({i}) {el_desc}
+            """.format(i=i, el_desc=el_desc)
+
+        return desc
+
     @staticmethod
     def build_validator(validator_info, name, parent_name):
         datatype = validator_info['valType']  # type: str
@@ -951,27 +971,11 @@ class InfoArrayValidator(BaseValidator):
             # Pass None through
             pass
         elif not isinstance(v, (list, tuple)):
-            raise ValueError(('The {name} property of {parent_name} must be a list or tuple.\n'
-                              'Received value of type {typ}: {v}').format(name=self.name,
-                                                                          parent_name=self.parent_name,
-                                                                          typ=type(v),
-                                                                          v=v))
+            self.raise_invalid_val(v)
         elif not self.free_length and len(v) != len(self.item_validators):
-            raise ValueError(('The {name} property of {parent_name} must be a list or tuple of length {N}.\n'
-                              'Received a {in_cls} of length {in_N}: {v}').format(name=self.name,
-                                                                                  parent_name=self.parent_name,
-                                                                                  N=len(self.item_validators),
-                                                                                  in_cls=type(v),
-                                                                                  in_N=len(v),
-                                                                                  v=v))
+            self.raise_invalid_val(v)
         elif self.free_length and len(v) > len(self.item_validators):
-            raise ValueError(('The {name} property of {parent_name} must be a list or tuple of length {N} or less.\n'
-                              'Received a {in_cls} of length {in_N}: {v}').format(name=self.name,
-                                                                                  parent_name=self.parent_name,
-                                                                                  N=len(self.item_validators),
-                                                                                  in_cls=type(v),
-                                                                                  in_N=len(v),
-                                                                                  v=v))
+            self.raise_invalid_val(v)
         else:
             # We have a list or tuple of the correct length
             v = list(v)
@@ -987,6 +991,18 @@ class InfoArrayValidator(BaseValidator):
 class ImageUriValidator(BaseValidator):
     def __init__(self, name, parent_name, **_):
         super().__init__(name=name, parent_name=parent_name)
+
+    def description(self):
+
+        desc = """\
+    The '{name}' property is an image URI that may be specified as:
+      - A remote image URI string (e.g. 'http://www.somewhere.com/image.png')
+      - A local image URI string (e.g. 'file:////somewhere/image.png')
+      - A data URI image string (e.g. 'data:image/png;base64,iVBORw0KGgoAAAANSU')
+      - A PIL.Image.Image object which will be immediately converted to a data URI image string
+            See http://pillow.readthedocs.io/en/latest/reference/Image.html
+        """.format(name=self.name)
+        return desc
 
     def validate_coerce(self, v):
         if v is None:
@@ -1006,11 +1022,8 @@ class ImageUriValidator(BaseValidator):
             base64_encoded_result_str = base64_encoded_result_bytes.decode('ascii')
             v = f'data:image/png;base64,{base64_encoded_result_str}'
         else:
-            raise ValueError(("The {name} property of {parent_name} must be a string or a PIL.image \n"
-                              "    Received value of type {typ}: {v}").format(name=self.name,
-                                                                              parent_name=self.parent_name,
-                                                                              typ=type(v),
-                                                                              v=v))
+            self.raise_invalid_val(v)
+
         return v
 
 
@@ -1018,6 +1031,38 @@ class CompoundValidator(BaseValidator):
     def __init__(self, name, parent_name, data_class):
         super().__init__(name=name, parent_name=parent_name)
         self.data_class = data_class
+
+    @staticmethod
+    def get_constructor_params_str(data_class):
+        params_match = re.search("Parameters\n\W*-+\n\W*(.*?)(Returns|$)",
+                                 str(data_class.__init__.__doc__),
+                                 flags=re.DOTALL)
+
+        if params_match is not None:
+            param_descs = params_match.groups()[0]
+
+            # Increase indent by 4 spaces
+            param_descs_indented = ('\n' + ' ' * 4).join(param_descs.split('\n'))
+
+            return param_descs_indented
+        else:
+            return ''
+
+    def description(self):
+
+        desc = ("""\
+    The '{name}' property is an instance of {data_class} that may be specified as:
+      - An instance of {data_class}
+      - A dict of string/value properties that will be passed to the {data_class} constructor
+      
+        Supported dict properties:
+            
+            {constructor_params_str}"""
+                ).format(name=self.name,
+                         data_class=type_str(self.data_class),
+                         constructor_params_str=self.get_constructor_params_str(self.data_class))
+
+        return desc
 
     def validate_coerce(self, v):
         if v is None:
@@ -1031,11 +1076,8 @@ class CompoundValidator(BaseValidator):
             pass
 
         elif not isinstance(v, str):
-            raise ValueError(("The {name} property of {parent_name} must be a dict or an instance of '{cls_name}'.\n"
-                              "Received value of type {typ}").format(name=self.name,
-                                                                     parent_name=self.parent_name,
-                                                                     cls_name=self.data_class.__name__,
-                                                                     typ=type(v)))
+            self.raise_invalid_val(v)
+
         v._prop_name = self.name
         return v
 
@@ -1045,42 +1087,69 @@ class CompoundArrayValidator(BaseValidator):
         super().__init__(name=name, parent_name=parent_name)
         self.data_class = element_class
 
+    def description(self):
+
+        desc = ("""\
+    The '{name}' property is a tuple of instances of {data_class} that may be specified as:
+      - A list or tuple of instances of {data_class}
+      - A list or tuple of dicts of string/value properties that will be passed to the {data_class} constructor
+
+        Supported dict properties:
+
+            {constructor_params_str}"""
+                ).format(name=self.name,
+                         data_class=type_str(self.data_class),
+                         constructor_params_str=CompoundValidator.get_constructor_params_str(self.data_class))
+
+        return desc
+
     def validate_coerce(self, v):
         if v is None:
             v = ()
 
         elif isinstance(v, (list, tuple)):
             res = []
+            invalid_els = []
             for v_el in v:
                 if isinstance(v_el, self.data_class):
                     res.append(v_el)
                 elif isinstance(v_el, dict):
                     res.append(self.data_class(**v_el))
                 else:
-                    raise ValueError(("The {name} property of {parent_name} must be a list or tuple "
-                                      "of {cls_name} instances.\n"
-                                      "Received {col_type} with an instance of type {typ}"
-                                      ).format(name=self.name,
-                                               parent_name=self.parent_name,
-                                               cls_name=self.data_class.__name__,
-                                               col_type=type(v),
-                                               typ=type(v_el)))
+                    res.append(None)
+                    invalid_els.append(v_el)
+
+            if invalid_els:
+                self.raise_invalid_elements(invalid_els)
+
             v = tuple(res)
 
         elif not isinstance(v, str):
-            raise ValueError(("The {name} property of {parent_name} must be a list or tuple "
-                              "of '{cls_name}' instances.\n"
-                              "Received value of type {typ}").format(name=self.name,
-                                                                     parent_name=self.parent_name,
-                                                                     cls_name=self.data_class.__name__,
-                                                                     typ=type(v)))
+            self.raise_invalid_val(v)
 
         return v
 
 
-class BaseTracesValidator:
+class BaseTracesValidator(BaseValidator):
     def __init__(self, class_map):
+        super().__init__(name='traces', parent_name='Figure')
         self.class_map = class_map
+
+    def description(self):
+
+        desc = ("""\
+    The '{name}' property is a tuple of trace instances that may be specified as:
+      - A list or tuple of trace instances 
+        (e.g. [Scatter(...), Bar(...)])
+      - A list or tuple of dicts of string/value properties where:
+        - The 'type' property specifies the trace type
+            One of: {trace_types}
+        - All remaining properties are passed to the constructor of the specified trace type
+        
+        (e.g. [{{'type': 'scatter', ...}}, {{'type': 'bar, ...}}])"""
+                ).format(name=self.name, trace_types=list(self.class_map.keys()))
+
+        return desc
 
     def validate_coerce(self, v):
 
@@ -1090,29 +1159,31 @@ class BaseTracesValidator:
             trace_classes = tuple(self.class_map.values())
 
             res = []
+            invalid_els = []
             for v_el in v:
                 if isinstance(v_el, trace_classes):
                     res.append(v_el)
                 elif isinstance(v_el, dict):
-                    if 'type' in v_el:
-                        trace_type = v_el.pop('type')
+                    v_copy = deepcopy(v_el)
+
+                    if 'type' in v_copy:
+                        trace_type = v_copy.pop('type')
                     else:
                         trace_type = 'scatter'
 
                     if trace_type not in self.class_map:
-                        raise ValueError(("Unknown trace type '{trace_type}'.\n"
-                                         "Supported trace types: {trace_types}")
-                                         .format(trace_type=trace_type,
-                                                 trace_types=', '.join(self.class_map.keys())))
-
-                    trace = self.class_map[trace_type](**v_el)
-                    res.append(trace)
+                        res.append(None)
+                        invalid_els.append(v_el)
+                    else:
+                        trace = self.class_map[trace_type](**v_copy)
+                        res.append(trace)
                 else:
-                    raise ValueError(("The traces property of a Figure must be a list or tuple "
-                                      "of traces.\n"
-                                      "Received {col_type} with an instance of type {typ}"
-                                      ).format(col_type=type(v),
-                                               typ=type(v_el)))
+                    res.append(None)
+                    invalid_els.append(v_el)
+
+            if invalid_els:
+                self.raise_invalid_elements(invalid_els)
+
             v = tuple(res)
 
             # Add UIDs if not set.
@@ -1121,9 +1192,7 @@ class BaseTracesValidator:
                 if trace.uid is None:
                     trace.uid = str(uuid.uuid1())
 
-        elif not isinstance(v, str):
-            raise ValueError(("The traces property of a Figure must be a list or tuple "
-                              "of traces.\n"
-                              "Received value of type {typ}").format(typ=type(v)))
+        else:
+            self.raise_invalid_val(v)
 
         return v

@@ -64,7 +64,7 @@ def test_rejection_type(val, validator: FlaglistValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert 'must be a string.' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # ### Rejection by value ###
@@ -74,7 +74,7 @@ def test_rejection_val(val, validator: FlaglistValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert 'Invalid flaglist received' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # Array not ok (with extras)
@@ -105,7 +105,7 @@ def test_rejection_val(val, validator_extra: FlaglistValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_extra.validate_coerce(val)
 
-    assert 'Invalid flaglist received' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # Array OK (with extras)
@@ -155,7 +155,7 @@ def test_rejection_aok_type(val, validator_extra_aok: FlaglistValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_extra_aok.validate_coerce(val)
 
-    assert 'must be a string or array of strings.' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # ### Rejection by element type ###
@@ -168,7 +168,7 @@ def test_rejection_aok_element_type(val, validator_extra_aok: FlaglistValidator)
     with pytest.raises(ValueError) as validation_failure:
         validator_extra_aok.validate_coerce(val)
 
-    assert 'All elements of the prop property of parent must be strings.' in str(validation_failure.value)
+    assert 'Invalid element(s)' in str(validation_failure.value)
 
 
 # ### Rejection by element values ###
@@ -181,4 +181,4 @@ def test_rejection_aok_element_val(val, validator_extra_aok: FlaglistValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator_extra_aok.validate_coerce(val)
 
-    assert 'Invalid flaglist element(s)' in str(validation_failure.value)
+    assert 'Invalid element(s)' in str(validation_failure.value)

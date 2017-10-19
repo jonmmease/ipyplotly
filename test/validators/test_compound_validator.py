@@ -6,6 +6,18 @@ from ipyplotly.basevalidators import CompoundValidator
 # ----------------
 class CompoundType:
     def __init__(self, a=None, b=None, c=None):
+        """
+        Construct a CompoundType
+
+        Parameters
+        ----------
+        a :
+            a description
+        b :
+            b description
+        c :
+            c description
+        """
         self.a = a
         self.b = b
         self.c = c
@@ -56,7 +68,7 @@ def test_rejection_type(validator: CompoundValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert "must be a dict or an instance of 'CompoundType'." in str(validation_failure.value)
+    assert "Invalid value" in str(validation_failure.value)
 
 
 def test_rejection_value(validator: CompoundValidator):

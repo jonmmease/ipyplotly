@@ -6,6 +6,22 @@ from ipyplotly.basevalidators import CompoundArrayValidator
 # ----------------
 class CompoundType:
     def __init__(self, a=None, b=None, c=None):
+        """
+        Construct a CompoundType
+
+        Parameters
+        ----------
+        a :
+            a description
+        b :
+            b description
+        c :
+            c description
+
+        Returns
+        -------
+        a CompoundType instance
+        """
         self.a = a
         self.b = b
         self.c = c
@@ -69,7 +85,16 @@ def test_rejection_type(validator: CompoundArrayValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert "must be a list or tuple of 'CompoundType' instances." in str(validation_failure.value)
+    assert "Invalid value" in str(validation_failure.value)
+
+
+def test_rejection_element(validator: CompoundArrayValidator):
+    val = [{'a': 23}, 37]
+
+    with pytest.raises(ValueError) as validation_failure:
+        validator.validate_coerce(val)
+
+    assert "Invalid element(s)" in str(validation_failure.value)
 
 
 def test_rejection_value(validator: CompoundArrayValidator):

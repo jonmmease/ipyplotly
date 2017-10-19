@@ -36,3 +36,14 @@ def test_validator_coercion_PIL(validator: ImageUriValidator):
     img = Image.open(img_path)
     coerce_val = validator.validate_coerce(img)
     assert coerce_val == expected_uri
+
+
+# ### Rejection ###
+@pytest.mark.parametrize('val', [
+    23, set(), []
+])
+def test_rejection_by_type(val, validator):
+    with pytest.raises(ValueError) as validation_failure:
+        validator.validate_coerce(val)
+
+    assert 'Invalid value' in str(validation_failure.value)

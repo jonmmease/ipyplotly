@@ -1,5 +1,5 @@
 import pytest
-from ipyplotly.basevalidators import InfoArrayValidator
+from ipyplotly.basevalidators import InfoArrayValidator, type_str
 import numpy as np
 
 
@@ -57,7 +57,7 @@ def test_validator_rejection_any2_length(val, validator_any2: InfoArrayValidator
     with pytest.raises(ValueError) as validation_failure:
         validator_any2.validate_coerce(val)
 
-    assert 'must be a list or tuple of length 2.' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # Number3 Tests
@@ -129,7 +129,7 @@ def test_validator_rejection_any2_type(val, validator_number3_free: InfoArrayVal
     with pytest.raises(ValueError) as validation_failure:
         validator_number3_free.validate_coerce(val)
 
-    assert 'must be a list or tuple.' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # ### Rejection by length ###
@@ -140,7 +140,7 @@ def test_validator_rejection_number3_free_length(val, validator_number3_free: In
     with pytest.raises(ValueError) as validation_failure:
         validator_number3_free.validate_coerce(val)
 
-    assert 'must be a list or tuple of length 3 or less.' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # ### Rejection by element type ###
@@ -154,5 +154,5 @@ def test_validator_rejection_number3_length(val, first_invalid_ind, validator_nu
         validator_number3_free.validate_coerce(val)
 
     assert ("Invalid value of type {typ} received for the 'prop[{first_invalid_ind}]' property of parent"
-            .format(typ=type(val[first_invalid_ind]),
+            .format(typ= type_str(val[first_invalid_ind]),
                     first_invalid_ind=first_invalid_ind)) in str(validation_failure.value)

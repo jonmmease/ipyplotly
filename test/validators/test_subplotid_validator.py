@@ -26,7 +26,7 @@ def test_rejection_type(val, validator: SubplotidValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert 'must be a string.' in str(validation_failure.value)
+    assert 'Invalid value' in str(validation_failure.value)
 
 
 # ### Rejection by value ###
@@ -39,4 +39,4 @@ def test_rejection_value(val, validator: SubplotidValidator):
     with pytest.raises(ValueError) as validation_failure:
         validator.validate_coerce(val)
 
-    assert "must be a string prefixed by 'geo', optionally followed by an integer > 1" in str(validation_failure.value)
+    assert "Invalid value" in str(validation_failure.value)
