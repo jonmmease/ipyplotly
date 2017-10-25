@@ -10,6 +10,7 @@ from pprint import pprint
 import ipywidgets as widgets
 
 from ipyplotly import animation
+from ipyplotly.basevalidators import CompoundValidator, CompoundArrayValidator
 from ipyplotly.serializers import custom_serializers
 from traitlets import List, Unicode, Dict, default, observe, Integer, Bool, Undefined
 
@@ -393,7 +394,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
                         dispatch_plan[trace_ind][key_path_so_far]['changed_paths'].add(keys_left)
 
-                        next_val = parent_obj.__getitem__(next_key)
+                        next_val = parent_obj[next_key]
                     elif isinstance(parent_obj, (list, tuple)):
                         next_val = parent_obj[next_key]
                     else:
@@ -696,7 +697,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                         dispatch_plan[key_path_so_far] = {'obj': parent_obj, 'changed_paths': set()}
                     dispatch_plan[key_path_so_far]['changed_paths'].add(keys_left)
 
-                    next_val = parent_obj.__getitem__(next_key)
+                    next_val = parent_obj[next_key]
                     # parent_obj._dispatch_change_callbacks(next_key, next_val)
                 elif isinstance(parent_obj, (list, tuple)):
                     next_val = parent_obj[next_key]
@@ -1253,10 +1254,11 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         return relayout_terms
 
+
 class BasePlotlyType:
+    # Defaults to help mocking
     def __init__(self, prop_name):
         self._prop_name = prop_name
-        # self._data = {}
         self._validators = {}
         self._compound_props = {}
         self._orphan_data = {}  # properties dict for use while object has no parent
@@ -1353,6 +1355,9 @@ class BasePlotlyType:
 
             return res
         else:
+            if prop not in self._validators:
+                raise KeyError(prop)
+
             if prop in self._compound_props:
                 return self._compound_props[prop]
             elif self._data is not None and prop in self._data:
@@ -1360,8 +1365,21 @@ class BasePlotlyType:
             elif self._delta is not None:
                 return self._delta.get(prop, None)
             else:
-                # TODO: Only None if this is a valid path. ValueError otherwise
                 return None
+
+    def __setitem__(self, key, value):
+        if key not in self._validators:
+            raise KeyError(key)
+
+        validator = self._validators[key]
+
+        if isinstance(validator, CompoundValidator):
+            self._set_compound_prop(key, value)
+        elif isinstance(validator, CompoundArrayValidator):
+            self._set_array_prop(key, value)
+        else:
+            # Simple property
+            self._set_prop(key, value)
 
     @property
     def _in_batch_mode(self):
@@ -1522,7 +1540,7 @@ class BasePlotlyType:
             common_paths = changed_paths.intersection(set(callback_paths))
             if common_paths:
                 # Invoke callback
-                callback_args = [self.__getitem__(cb_path) for cb_path in callback_paths]
+                callback_args = [self[cb_path] for cb_path in callback_paths]
                 callback(self, *callback_args)
 
     def on_change(self, callback, *args):

@@ -6,18 +6,6 @@ from ipyplotly.basevalidators import CompoundValidator
 # ----------------
 class CompoundType:
     def __init__(self, a=None, b=None, c=None):
-        """
-        Construct a CompoundType
-
-        Parameters
-        ----------
-        a :
-            a description
-        b :
-            b description
-        c :
-            c description
-        """
         self.a = a
         self.b = b
         self.c = c

@@ -105,18 +105,11 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         return self['{subtype_node.name_property}']""")
 
             # #### Set property ###
-            if subtype_node.is_simple:
-                prop_set_method = '_set_prop'
-            elif subtype_node.is_array_element:
-                prop_set_method = '_set_array_prop'
-            else:
-                prop_set_method = '_set_compound_prop'
-
             buffer.write(f"""
 
     @{subtype_node.name_property}.setter
     def {subtype_node.name_property}(self, val):
-        self.{prop_set_method}('{subtype_node.name_property}', val)\n""")
+        self['{subtype_node.name_property}'] = val\n""")
 
         # ### Literals ###
         for literal_node in literal_nodes:
