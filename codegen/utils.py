@@ -144,6 +144,15 @@ class PlotlyNode:
         else:
             extra_args = {n.name_undercase: n.node_data for n in self.simple_attrs}
 
+            # Add extra properties
+            if self.datatype == 'color':
+                # Check for colorscale sibling
+                colorscale_node_list = [node for node in self.parent.child_datatypes
+                                        if node.datatype == 'colorscale']
+                if colorscale_node_list:
+                    colorscale_path = colorscale_node_list[0].dir_str
+                    extra_args['colorscale_path'] = repr(colorscale_path)
+
         return validator_class(**args, **extra_args)
 
     @property

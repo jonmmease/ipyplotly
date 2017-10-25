@@ -18,7 +18,15 @@ def build_validators_py(parent_node: PlotlyNode):
     # -------
     buffer.write('import ipyplotly.basevalidators as bv\n')
 
-    # Compound datatypes loop
+    # Check for colorscale node
+    # -------------------------
+    colorscale_node_list = [node for node in datatype_nodes if node.datatype == 'colorscale']
+    if colorscale_node_list:
+        colorscale_path = colorscale_node_list[0].dir_str
+    else:
+        colorscale_path = None
+
+        # Compound datatypes loop
     # -----------------------
     for datatype_node in datatype_nodes:
 
@@ -52,6 +60,7 @@ class {datatype_node.name_validator}(bv.{datatype_node.name_base_validator}):
         else:
             assert datatype_node.is_simple
 
+            # Exclude general properties
             excluded_props = ['valType', 'description', 'role', 'dflt']
             if datatype_node.datatype == 'subplotid':
                 # Default is required for subplotid validator
@@ -59,9 +68,16 @@ class {datatype_node.name_validator}(bv.{datatype_node.name_base_validator}):
 
             attr_nodes = [n for n in datatype_node.simple_attrs
                           if n.name not in excluded_props]
-            for i, attr_node in enumerate(attr_nodes):
+
+            attr_dict = {node.name_undercase: repr(node.node_data) for node in attr_nodes}
+
+            # Add special properties
+            if datatype_node.datatype == 'color' and colorscale_path:
+                attr_dict['colorscale_path'] = repr(colorscale_path)
+
+            for attr_name, attr_val in attr_dict.items():
                 buffer.write(f""",
-                         {attr_node.name_undercase}={repr(attr_node.node_data)}""")
+                         {attr_name}={attr_val}""")
 
         buffer.write(')')
 
