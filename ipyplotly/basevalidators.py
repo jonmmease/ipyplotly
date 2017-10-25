@@ -987,8 +987,6 @@ class InfoArrayValidator(BaseValidator):
                 # Validate coerce elements
                 v[i] = validator.validate_coerce(el)
 
-            v = tuple(v)
-
         return v
 
 
