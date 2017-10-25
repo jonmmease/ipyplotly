@@ -1,4 +1,4 @@
-pythonic plotly API for use in Jupyteer
+pythonic plotly API for use in Jupyter
 
 Package Install
 ---------------

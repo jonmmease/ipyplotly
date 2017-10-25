@@ -23,8 +23,8 @@
     "webpack": "^1.12.14"
   },
   "dependencies": {
-    "plotly.js": "^1.29.3",
-    "@jupyter-widgets/base": "^1.0.1",
+    "plotly.js": "^1.31.2",
+    "@jupyter-widgets/base": "^1.0.4",
     "underscore": "^1.8.3"
   }
 }
