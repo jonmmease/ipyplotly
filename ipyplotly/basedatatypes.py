@@ -388,6 +388,10 @@ class BaseFigureWidget(widgets.DOMWidget):
 
                 # Iterate down the key path
                 for next_key in key_path:
+                    if next_key not in parent_obj:
+                        # Not a property
+                        break
+
                     if isinstance(parent_obj, BasePlotlyType):
                         if key_path_so_far not in dispatch_plan[trace_ind]:
                             dispatch_plan[trace_ind][key_path_so_far] = {'obj': parent_obj, 'changed_paths': set()}
@@ -398,6 +402,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                     elif isinstance(parent_obj, (list, tuple)):
                         next_val = parent_obj[next_key]
                     else:
+                        # Primitive value
                         break
 
                     key_path_so_far = key_path_so_far + (next_key,)
@@ -604,6 +609,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     @observe('_js2py_relayout')
     def handler_plotly_relayoutPython(self, change):
         relayout_data = change['new']
+        # print(f'_js2py_relayout: {relayout_data}')
         self._js2py_relayout = None
 
         if not relayout_data:
@@ -692,6 +698,9 @@ class BaseFigureWidget(widgets.DOMWidget):
 
             # Iterate down the key path
             for next_key in key_path:
+                if next_key not in parent_obj:
+                    break
+
                 if isinstance(parent_obj, BasePlotlyType):
                     if key_path_so_far not in dispatch_plan:
                         dispatch_plan[key_path_so_far] = {'obj': parent_obj, 'changed_paths': set()}
@@ -702,6 +711,7 @@ class BaseFigureWidget(widgets.DOMWidget):
                 elif isinstance(parent_obj, (list, tuple)):
                     next_val = parent_obj[next_key]
                 else:
+                    # Primitive value
                     break
 
                 key_path_so_far = key_path_so_far + (next_key,)
@@ -1366,6 +1376,9 @@ class BasePlotlyType:
                 return self._delta.get(prop, None)
             else:
                 return None
+
+    def __contains__(self, prop):
+        return prop in self._validators
 
     def __setitem__(self, key, value):
         if key not in self._validators:
