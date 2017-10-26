@@ -1266,6 +1266,8 @@ class BaseFigureWidget(widgets.DOMWidget):
 
 
 class BasePlotlyType:
+    _validators = None
+
     # Defaults to help mocking
     def __init__(self, prop_name):
         self._prop_name = prop_name
