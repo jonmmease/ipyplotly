@@ -53,7 +53,7 @@ def test_set_get_compound_property(plotly_obj):
     # Just to make sure we copy data on assignment
     d['a'] = 1
 
-    # Parent Assertions
+    # Object Assertions
     # -----------------
     # ### test get ###
     assert plotly_obj['prop1'] is v
@@ -70,7 +70,7 @@ def test_set_get_compound_property(plotly_obj):
     # ### validator called properly ###
     plotly_obj._validators['prop1'].validate_coerce.assert_called_once_with(v)
 
-    # Child Assertions
+    # Value Assertions
     # ----------------
     # ### Parent set to plotly_obj
     assert v._parent is plotly_obj
@@ -81,3 +81,47 @@ def test_set_get_compound_property(plotly_obj):
 
 # With parent
 # -----------
+def test_set_get_property_with_parent(plotly_obj, parent):
+
+    # Setup value
+    # -----------
+    v = mock.Mock()
+    d = {'a': 23}
+    type(v)._data = mock.PropertyMock(return_value=d)
+
+    # Setup parent
+    # ------------
+    plotly_obj._parent = parent
+
+    # Perform set_prop
+    # ----------------
+    plotly_obj['prop1'] = v
+
+    # Parent Assertions
+    # -----------------
+    parent._get_child_data.assert_called_with(plotly_obj)
+
+    # Object Assertions
+    # -----------------
+    # ### test get ###
+    assert plotly_obj['prop1'] is v
+
+    # ### _send_update sent ###
+    plotly_obj._send_update.assert_called_once_with('prop1', d)
+
+    # ### orphan data cleared ###
+    assert plotly_obj._orphan_data == {}
+
+    # ### _data bound to parent dict ###
+    assert parent._get_child_data(plotly_obj) is plotly_obj._data
+
+    # ### validator called properly ###
+    plotly_obj._validators['prop1'].validate_coerce.assert_called_once_with(v)
+
+    # Value Assertions
+    # ----------------
+    # ### Parent set to plotly_obj
+    assert v._parent is plotly_obj
+
+    # ### Orphan data cleared ###
+    v._orphan_data.clear.assert_called_once()
