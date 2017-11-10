@@ -985,7 +985,9 @@ class BaseFigureWidget(widgets.DOMWidget):
                 yield
             finally:
                 self._in_batch_mode = False
-                self._send_batch_animate({'transition': {'duration': duration, 'easing': easing}})
+                self._send_batch_animate(
+                    {'transition': {'duration': duration,'easing': easing},
+                     'frame': {'duration': duration}})
 
     def _send_batch_animate(self, animation_opts):
 
