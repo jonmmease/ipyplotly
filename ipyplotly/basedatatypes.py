@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from pprint import pprint
 
+from io import StringIO
 import ipywidgets as widgets
 
 from ipyplotly import animation
@@ -27,6 +28,9 @@ import pathlib
 import numpy as np
 
 from urllib import parse
+
+import cairosvg
+
 
 # TODO:
 
@@ -1123,11 +1127,36 @@ class BaseFigureWidget(widgets.DOMWidget):
             os.remove(temp_filename)
             browser.quit()
 
-    def save_svg(self, filename):
+    def save_image(self, filename, image_type=None):
+
+        supported_image_types = ['svg', 'png', 'pdf', 'ps']
+        supported_types_csv = ', '.join(supported_image_types)
+
+        if not image_type:
+            # Infer image type from extension
+            _, extension = os.path.splitext(filename)
+
+            if not extension:
+                raise ValueError('No image_type specified and file extension has no extension '
+                                 'from which to infer an image type '
+                                 'Supported image types are: {image_types}'
+                                 .format(image_types=supported_types_csv))
+
+            image_type = extension[1:]
+
+        image_type = image_type.lower()
+        if image_type not in supported_image_types:
+            raise ValueError("Unsupported image type '{image_type}'\n"
+                             "Supported image types are: {image_types}"
+                             .format(image_type=image_type,
+                                     image_types=supported_types_csv))
+
         req_id = str(uuid.uuid1())
 
         # Register request
-        self._svg_requests[req_id] = {'filename': filename}
+        self._svg_requests[req_id] = {'filename': filename,
+                                      'image_type': image_type}
+
         self._py2js_requestSvg = req_id
         self._py2js_requestSvg = None
 
@@ -1149,11 +1178,24 @@ class BaseFigureWidget(widgets.DOMWidget):
             raise ValueError('Invalid svg data URI')
 
         svg = svg_uri.replace('data:image/svg+xml,', '')
+
         # Unquote characters (e.g. '%3Csvg%20' -> '<svg ')
-        svg = parse.unquote(svg)
+        svg_bytes = parse.unquote(svg).encode('utf-8')
         filename = req_info['filename']
-        with open(filename, 'w') as f:
-            f.write(svg)
+        image_type = req_info['image_type']
+
+        if image_type == 'svg':
+            with open(filename, 'wb') as f:
+                f.write(svg_bytes)
+        elif image_type == 'png':
+            cairosvg.svg2png(
+                bytestring=svg_bytes, write_to=filename, scale=2)
+        elif image_type == 'pdf':
+            cairosvg.svg2pdf(
+                bytestring=svg_bytes, write_to=filename)
+        elif image_type == 'ps':
+            cairosvg.svg2ps(
+                bytestring=svg_bytes, write_to=filename)
 
     # Static helpers
     # --------------
