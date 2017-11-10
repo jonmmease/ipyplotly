@@ -1,7 +1,7 @@
 import importlib
 import inspect
 import textwrap
-from typing import List
+from typing import List, Dict
 
 from io import StringIO
 from yapf.yapflib.yapf_api import FormatCode
@@ -27,11 +27,13 @@ class PlotlyNode:
         self.plotly_schema = plotly_schema
         if isinstance(node_path, str):
             node_path = (node_path,)
-        self.trace_path = node_path
+        self.node_path = node_path
 
         # Compute children
         if isinstance(self.node_data, dict):
-            self._children = [self.__class__(self.plotly_schema, self.trace_path + (c,), parent=self)
+            self._children = [self.__class__(self.plotly_schema,
+                                             node_path=self.node_path + (c,),
+                                             parent=self)
                               for c in self.node_data if c and c[0] != '_']
         else:
             self._children = []
@@ -64,10 +66,10 @@ class PlotlyNode:
 
     @property
     def name(self) -> str:
-        if len(self.trace_path) == 0:
+        if len(self.node_path) == 0:
             return self.base_name
         else:
-            return self.trace_path[-1]
+            return self.node_path[-1]
 
     @property
     def name_pascal_case(self) -> str:
@@ -106,11 +108,13 @@ class PlotlyNode:
 
         return validator_base
 
-    def get_constructor_params_docstring(self, indent=12):
+    def get_constructor_params_docstring(self, indent=12, extra_nodes=[]):
         assert self.is_compound
 
         buffer = StringIO()
-        for subtype_node in self.child_datatypes:
+
+        subtype_nodes = self.child_datatypes + extra_nodes
+        for subtype_node in subtype_nodes:
             raw_description = subtype_node.description
             subtype_description = '\n'.join(textwrap.wrap(raw_description,
                                                           subsequent_indent=' ' * (indent + 4),
@@ -213,9 +217,9 @@ class PlotlyNode:
     @property
     def dir_path(self) -> List[str]:
         res = [self.base_name] if self.base_name else []
-        for i, p in enumerate(self.trace_path):
+        for i, p in enumerate(self.node_path):
             if p == 'items' or \
-                    (i < len(self.trace_path) - 1 and self.trace_path[i+1] == 'items'):
+                    (i < len(self.node_path) - 1 and self.node_path[i+1] == 'items'):
                 # e.g. [parcoords, dimensions, items, dimension] -> [parcoords, dimension]
                 pass
             else:
@@ -305,6 +309,21 @@ class PlotlyNode:
 
         return nodes
 
+    @staticmethod
+    def get_all_trace_layout_nodes(plotly_schema) -> Dict[str, 'LayoutNode']:
+        trace_names = plotly_schema['schema']['traces'].keys()
+
+        datatype_nodes = {}
+        nodes_to_process = [TraceLayoutNode(plotly_schema, trace_name)
+                            for trace_name in trace_names]
+
+        while nodes_to_process:
+            parent_node = nodes_to_process.pop()
+            for node in parent_node.child_simple_datatypes:
+                datatype_nodes[node.dir_str] = node
+
+        return datatype_nodes
+
 
 class TraceNode(PlotlyNode):
 
@@ -315,7 +334,7 @@ class TraceNode(PlotlyNode):
 
     @property
     def base_datatype_class(self):
-        if len(self.trace_path) == 0:
+        if len(self.node_path) == 0:
             return 'BaseTraceType'
         else:
             return 'BaseTraceHierarchyType'
@@ -328,11 +347,11 @@ class TraceNode(PlotlyNode):
     # --------
     @property
     def node_data(self) -> dict:
-        if not self.trace_path:
+        if not self.node_path:
             node_data = self.plotly_schema['schema']['traces']
         else:
-            node_data = self.plotly_schema['schema']['traces'][self.trace_path[0]]['attributes']
-            for prop_name in self.trace_path[1:]:
+            node_data = self.plotly_schema['schema']['traces'][self.node_path[0]]['attributes']
+            for prop_name in self.node_path[1:]:
                 node_data = node_data[prop_name]
 
         return node_data
@@ -341,10 +360,10 @@ class TraceNode(PlotlyNode):
     # -----------
     @property
     def description(self) -> str:
-        if len(self.trace_path) == 0:
+        if len(self.node_path) == 0:
             return ""
-        elif len(self.trace_path) == 1:
-            return self.plotly_schema['schema']['traces'][self.trace_path[0]]['meta'].get('description', '')
+        elif len(self.node_path) == 1:
+            return self.plotly_schema['schema']['traces'][self.node_path[0]]['meta'].get('description', '')
         else:
             return self.node_data.get('description', '')
 
@@ -358,7 +377,7 @@ class LayoutNode(PlotlyNode):
 
     @property
     def base_datatype_class(self):
-        if len(self.trace_path) == 0:
+        if len(self.node_path) == 0:
             return 'BaseLayoutType'
         else:
             return 'BaseLayoutHierarchyType'
@@ -369,12 +388,12 @@ class LayoutNode(PlotlyNode):
 
     @property
     def name(self) -> str:
-        if len(self.trace_path) == 0:
+        if len(self.node_path) == 0:
             return self.base_name
-        elif len(self.trace_path) == 1:
+        elif len(self.node_path) == 1:
             return 'layout'  # override 'layoutAttributes'
         else:
-            return self.trace_path[-1]
+            return self.node_path[-1]
 
     def tidy_dir_path(self, p):
         return 'layout' if p == 'layoutAttributes' else p
@@ -390,7 +409,49 @@ class LayoutNode(PlotlyNode):
     @property
     def node_data(self) -> dict:
         node_data = self.plotly_schema['schema']['layout']
-        for prop_name in self.trace_path:
+        for prop_name in self.node_path:
             node_data = node_data[prop_name]
+
+        return node_data
+
+
+class TraceLayoutNode(LayoutNode):
+
+    # Constructor
+    # -----------
+    def __init__(self, plotly_schema, trace_name=None, node_path=(), parent=None):
+
+        # Handle trace name
+        assert parent is not None or trace_name is not None
+        if parent is not None:
+            trace_name = parent.trace_name
+
+        self.trace_name = trace_name
+        super().__init__(plotly_schema, node_path, parent)
+
+    @property
+    def base_name(self):
+        return 'layout'
+
+    @property
+    def name(self) -> str:
+        if len(self.node_path) == 0:
+            return self.base_name
+        else:
+            return self.node_path[-1]
+
+    # Raw data
+    # --------
+    @property
+    def node_data(self) -> dict:
+        try:
+            node_data = (self.plotly_schema['schema']['traces']
+                         [self.trace_name]['layoutAttributes'])
+
+            for prop_name in self.node_path:
+                node_data = node_data[prop_name]
+
+        except KeyError:
+            node_data = []
 
         return node_data

@@ -2,13 +2,22 @@ import os
 import os.path as opath
 import shutil
 from io import StringIO
+from typing import Dict
+
 from codegen.utils import format_source, PlotlyNode, TraceNode
 
 custom_validator_datatypes = {'layout.image.source': 'ImageUri'}
 
 
-def build_validators_py(parent_node: PlotlyNode):
-    datatype_nodes = parent_node.child_datatypes
+def build_validators_py(parent_node: PlotlyNode,
+                        extra_nodes: Dict[str, 'PlotlyNode'] = {}):
+
+    extra_subtype_nodes = [node for node_name, node in
+                           extra_nodes.items() if
+                           node_name.startswith(parent_node.dir_str)]
+
+    datatype_nodes = parent_node.child_datatypes + extra_subtype_nodes
+
     if not datatype_nodes:
         return None
 
@@ -84,11 +93,13 @@ class {datatype_node.name_validator}(bv.{datatype_node.name_base_validator}):
     return buffer.getvalue()
 
 
-def write_validator_py(outdir, node: PlotlyNode):
+def write_validator_py(outdir,
+                       node: PlotlyNode,
+                       extra_nodes: Dict[str, 'PlotlyNode'] = {}):
 
     # Generate source code
     # --------------------
-    validator_source = build_validators_py(node)
+    validator_source = build_validators_py(node, extra_nodes)
     if validator_source:
         try:
             formatted_source = format_source(validator_source)
@@ -139,7 +150,7 @@ class TracesValidator(bv.BaseTracesValidator):
 
 def append_traces_validator_py(outdir, base_node: TraceNode):
 
-    if base_node.trace_path:
+    if base_node.node_path:
         raise ValueError('Expected root trace node. Received node with path "%s"' % base_node.dir_str)
 
     source = build_traces_validator_py(base_node)

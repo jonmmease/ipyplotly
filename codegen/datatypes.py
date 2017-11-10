@@ -2,6 +2,7 @@ from io import StringIO
 import os
 import os.path as opath
 import textwrap
+from typing import List, Dict
 
 from codegen.utils import TraceNode, format_source, PlotlyNode
 
@@ -28,7 +29,9 @@ def get_typing_type(plotly_type, array_ok=False):
         return pytype
 
 
-def build_datatypes_py(parent_node: PlotlyNode):
+def build_datatypes_py(parent_node: PlotlyNode,
+                       extra_nodes: Dict[str, 'PlotlyNode'] = {}):
+
     compound_nodes = parent_node.child_compound_datatypes
     if not compound_nodes:
         return None
@@ -63,7 +66,13 @@ def build_datatypes_py(parent_node: PlotlyNode):
 class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
 
         # ### Property definitions ###
-        for subtype_node in compound_node.child_datatypes:
+        child_datatype_nodes = compound_node.child_datatypes
+        extra_subtype_nodes = [node for node_name, node in
+                               extra_nodes.items() if
+                               node_name.startswith(compound_node.dir_str)]
+
+        subtype_nodes = child_datatype_nodes + extra_subtype_nodes
+        for subtype_node in subtype_nodes:
             if subtype_node.is_array_element:
                 prop_type = f'Tuple[d_{compound_node.name}.{subtype_node.name_class}]'
             elif subtype_node.is_compound:
@@ -125,15 +134,15 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         buffer.write(f"""
     def __init__(self""")
 
-        add_constructor_params(buffer, compound_node)
-        add_docstring(buffer, compound_node)
+        add_constructor_params(buffer, subtype_nodes)
+        add_docstring(buffer, compound_node, extra_subtype_nodes)
 
         buffer.write(f"""
         super().__init__('{compound_node.name_property}', **kwargs)
         
         # Initialize validators
         # ---------------------""")
-        for subtype_node in compound_node.child_datatypes:
+        for subtype_node in subtype_nodes:
 
             buffer.write(f"""
         self._validators['{subtype_node.name_property}'] = v_{compound_node.name}.{subtype_node.name_validator}()""")
@@ -142,7 +151,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         
         # Populate data dict with properties
         # ----------------------------------""")
-        for subtype_node in compound_node.child_datatypes:
+        for subtype_node in subtype_nodes:
             buffer.write(f"""
         self.{subtype_node.name_property} = {subtype_node.name_property}""")
 
@@ -160,8 +169,8 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
     return buffer.getvalue()
 
 
-def add_constructor_params(buffer, compound_node, colon=True):
-    for i, subtype_node in enumerate(compound_node.child_datatypes):
+def add_constructor_params(buffer, subtype_nodes, colon=True):
+    for i, subtype_node in enumerate(subtype_nodes):
         dflt = None
         buffer.write(f""",
             {subtype_node.name_property}={repr(dflt)}""")
@@ -172,7 +181,7 @@ def add_constructor_params(buffer, compound_node, colon=True):
         ){':' if colon else ''}""")
 
 
-def add_docstring(buffer, compound_node):
+def add_docstring(buffer, compound_node, extra_subtype_nodes=[]):
     # ### Docstring ###
     buffer.write(f"""
         \"\"\"
@@ -180,7 +189,9 @@ def add_docstring(buffer, compound_node):
         
         Parameters
         ----------""")
-    buffer.write(compound_node.get_constructor_params_docstring(indent=8))
+    buffer.write(compound_node.get_constructor_params_docstring(
+        indent=8,
+        extra_nodes=extra_subtype_nodes ))
 
     # #### close docstring ####
     buffer.write(f"""
@@ -191,11 +202,12 @@ def add_docstring(buffer, compound_node):
         \"\"\"""")
 
 
-def write_datatypes_py(outdir, node: PlotlyNode):
+def write_datatypes_py(outdir, node: PlotlyNode,
+                       extra_nodes: Dict[str, 'PlotlyNode']={}):
 
     # Generate source code
     # --------------------
-    datatype_source = build_datatypes_py(node)
+    datatype_source = build_datatypes_py(node, extra_nodes)
     if datatype_source:
         try:
             formatted_source = format_source(datatype_source)
@@ -235,7 +247,7 @@ class Figure(BaseFigureWidget):\n""")
         buffer.write(f"""
     def add_{trace_node.name}(self""")
 
-        add_constructor_params(buffer, trace_node)
+        add_constructor_params(buffer, trace_node.child_datatypes)
         add_docstring(buffer, trace_node)
 
         # Function body
@@ -261,7 +273,7 @@ class Figure(BaseFigureWidget):\n""")
 
 def append_figure_class(outdir, base_node: TraceNode):
 
-    if base_node.trace_path:
+    if base_node.node_path:
         raise ValueError('Expected root trace node. Received node with path "%s"' % base_node.dir_str)
 
     figure_source = build_figure_py(base_node)

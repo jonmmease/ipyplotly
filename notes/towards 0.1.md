@@ -3,6 +3,11 @@
 Some notes on the things that should happen in preparation for a public 0.1 release 
 
 
+## 11/01 Notes
+[ ] Need to code gen layoutAttributes added in traces (like Pie)
+[ ] set frame.duration value to match transition.duration in fig.batch_animate(): context manager  
+[ ] Bring svg data uri back to python side for static image export. Use svgcairo to convert to png
+ 
 ## Features
 
 ### Misc
