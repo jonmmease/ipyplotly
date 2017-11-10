@@ -26,6 +26,8 @@ import os
 import pathlib
 import numpy as np
 
+from urllib import parse
+
 # TODO:
 
 @widgets.register
@@ -58,6 +60,9 @@ class BaseFigureWidget(widgets.DOMWidget):
     _py2js_removeLayoutProps = List(allow_none=True).tag(sync=True, **custom_serializers)
     _py2js_removeStyleProps = List(allow_none=True).tag(sync=True, **custom_serializers)
 
+    _py2js_requestSvg = Unicode(allow_none=True).tag(sync=True)
+
+
     # JS -> Python message properties
     _js2py_styleDelta = List(allow_none=True).tag(sync=True, **custom_serializers)
     _js2py_layoutDelta = Dict(allow_none=True).tag(sync=True, **custom_serializers)
@@ -67,6 +72,9 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # For plotly_select/hover/unhover/click
     _js2py_pointsCallback = Dict(allow_none=True).tag(sync=True, **custom_serializers)
+
+    # For plotly_select/hover/unhover/click
+    _js2py_svg = List(allow_none=True).tag(sync=True)
 
     # Message tracking
     _last_relayout_msg_id = Integer(0).tag(sync=True)
@@ -128,6 +136,9 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._batch_layout_commands = {}  # type: typ.Dict[str, typ.Any]
         self._animation_duration_validator = animation.DurationValidator()
         self._animation_easing_validator = animation.EasingValidator()
+
+        # SVG
+        self._svg_requests = {}
 
     # ### Trait methods ###
     @observe('_js2py_styleDelta')
@@ -1111,6 +1122,38 @@ class BaseFigureWidget(widgets.DOMWidget):
         finally:
             os.remove(temp_filename)
             browser.quit()
+
+    def save_svg(self, filename):
+        req_id = str(uuid.uuid1())
+
+        # Register request
+        self._svg_requests[req_id] = {'filename': filename}
+        self._py2js_requestSvg = req_id
+        self._py2js_requestSvg = None
+
+    @observe('_js2py_svg')
+    def handler_js2py_svg(self, change):
+        msg = change['new']
+        self._js2py_svg = None
+
+        if not msg:
+            return
+
+        [req_id, svg_uri] = msg
+        req_info = self._svg_requests.pop(req_id, None)
+        if not req_info:
+            return
+
+        # Remove svg header
+        if not svg_uri.startswith('data:image/svg+xml,'):
+            raise ValueError('Invalid svg data URI')
+
+        svg = svg_uri.replace('data:image/svg+xml,', '')
+        # Unquote characters (e.g. '%3Csvg%20' -> '<svg ')
+        svg = parse.unquote(svg)
+        filename = req_info['filename']
+        with open(filename, 'w') as f:
+            f.write(svg)
 
     # Static helpers
     # --------------

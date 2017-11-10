@@ -28,6 +28,8 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         _py2js_removeLayoutProps: null,
         _py2js_removeStyleProps: null,
 
+        _py2js_requestSvg: null,
+
         // JS -> Python
         _js2py_restyle: null,
         _js2py_relayout: null,
@@ -38,6 +40,9 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
         // callbacks
         _js2py_pointsCallback: null,
+
+        // svg
+        _js2py_svg: null,
 
         // message tracking
         _last_relayout_msg_id: 0,
@@ -511,6 +516,7 @@ var FigureView = widgets.DOMWidgetView.extend({
         this.model.on("change:_py2js_relayout", this.do_relayout, this);
         this.model.on("change:_py2js_update", this.do_update, this);
         this.model.on("change:_py2js_animate", this.do_animate, this);
+        this.model.on("change:_py2js_requestSvg", this.do_requestSvg, this);
 
         // Increment message ids
         // ---------------------
@@ -1025,6 +1031,20 @@ var FigureView = widgets.DOMWidgetView.extend({
                 that.model.set('_js2py_layoutDelta', relayoutDelta);
 
                 that.touch();
+            });
+        }
+    },
+
+    do_requestSvg: function() {
+        console.log('FigureView: do_requestSvg');
+        var req_id = this.model.get('_py2js_requestSvg');
+        var that = this;
+        if (req_id !== null) {
+            Plotly.toImage(this.el, {format:'svg'}).then(function (svg) {
+                console.log([req_id, svg]);
+
+                that.model.set('_js2py_svg', [req_id, svg]);
+                that.touch()
             });
         }
     },
