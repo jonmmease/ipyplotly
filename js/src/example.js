@@ -1040,11 +1040,13 @@ var FigureView = widgets.DOMWidgetView.extend({
         var req_id = this.model.get('_py2js_requestSvg');
         var that = this;
         if (req_id !== null) {
-            Plotly.toImage(this.el, {format:'svg'}).then(function (svg) {
-                console.log([req_id, svg]);
+            Plotly.toImage(this.el, {format:'svg'}).then(function (svg_uri) {
+                console.log([req_id, svg_uri]);
 
-                that.model.set('_js2py_svg', [req_id, svg]);
-                that.touch()
+                that.send({event: 'svg', req_id: req_id, svg_uri: svg_uri});
+
+                // that.model.set('_js2py_svg', [req_id, svg_uri]);
+                // that.touch();
             });
         }
     },

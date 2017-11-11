@@ -63,9 +63,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     _py2js_removeLayoutProps = List(allow_none=True).tag(sync=True, **custom_serializers)
     _py2js_removeStyleProps = List(allow_none=True).tag(sync=True, **custom_serializers)
-
     _py2js_requestSvg = Unicode(allow_none=True).tag(sync=True)
-
 
     # JS -> Python message properties
     _js2py_styleDelta = List(allow_none=True).tag(sync=True, **custom_serializers)
@@ -76,9 +74,6 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # For plotly_select/hover/unhover/click
     _js2py_pointsCallback = Dict(allow_none=True).tag(sync=True, **custom_serializers)
-
-    # For plotly_select/hover/unhover/click
-    _js2py_svg = List(allow_none=True).tag(sync=True)
 
     # Message tracking
     _last_relayout_msg_id = Integer(0).tag(sync=True)
@@ -143,6 +138,9 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         # SVG
         self._svg_requests = {}
+
+        # Messages
+        self.on_msg(self._handler_messages)
 
     # ### Trait methods ###
     @observe('_js2py_styleDelta')
@@ -1160,15 +1158,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._py2js_requestSvg = req_id
         self._py2js_requestSvg = None
 
-    @observe('_js2py_svg')
-    def handler_js2py_svg(self, change):
-        msg = change['new']
-        self._js2py_svg = None
-
-        if not msg:
-            return
-
-        [req_id, svg_uri] = msg
+    def _do_save_image(self, req_id, svg_uri):
         req_info = self._svg_requests.pop(req_id, None)
         if not req_info:
             return
@@ -1196,6 +1186,16 @@ class BaseFigureWidget(widgets.DOMWidget):
         elif image_type == 'ps':
             cairosvg.svg2ps(
                 bytestring=svg_bytes, write_to=filename)
+
+    # Custom Messages
+    # ---------------
+    def _handler_messages(self, widget, content, buffers):
+        """Handle a msg from the front-end.
+        """
+        if content.get('event', '') == 'svg':
+            req_id = content['req_id']
+            svg_uri = content['svg_uri']
+            self._do_save_image(req_id, svg_uri)
 
     # Static helpers
     # --------------
