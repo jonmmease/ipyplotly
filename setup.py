@@ -127,7 +127,7 @@ with open(os.path.join(here, 'ipyplotly', '_version.py')) as f:
 setup_args = {
     'name': 'ipyplotly',
     'version': version_ns['__version__'],
-    'description': 'pythonic plotly API for use in Jupyteer',
+    'description': 'pythonic plotly API for use in Jupyter',
     'long_description': LONG_DESCRIPTION,
     'include_package_data': True,
     'data_files': [
@@ -140,7 +140,9 @@ setup_args = {
     'install_requires': [
         'ipywidgets>=7.0',
         'numpy',
-        'pandas'
+        'pandas',
+        'pillow',
+        'cairosvg'
     ],
     'packages': find_packages(),
     'zip_safe': False,

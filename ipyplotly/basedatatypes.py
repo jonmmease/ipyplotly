@@ -19,7 +19,6 @@ from traitlets import List, Unicode, Dict, default, observe, Integer, Bool, Unde
 from ipyplotly.callbacks import Points, BoxSelector, LassoSelector, InputState
 from ipyplotly.validators.layout import XaxisValidator, YaxisValidator, GeoValidator, TernaryValidator, SceneValidator
 
-from selenium import webdriver
 from plotly.offline import plot as plotlypy_plot
 from PIL import Image, ImageOps
 import io
