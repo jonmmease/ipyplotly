@@ -1089,43 +1089,24 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         plotlypy_plot(data, filename=filename, show_link=False, auto_open=auto_open, validate=False)
 
-    def save_png(self, filename=None, scale_factor=2, border=20):
-        temp_filename = tempfile.mktemp() + '.html'
-        opts = webdriver.ChromeOptions()
-        opts.add_argument('headless')
-        browser = webdriver.Chrome(chrome_options=opts)
+    def save_image(self, filename, image_type=None, scale_factor=2):
+        """
+        Save figure to a static image file
 
-        try:
-            self.save_html(filename=temp_filename, responsive=False)
-            browser.get(pathlib.Path(temp_filename).as_uri())
-
-            # Pixel ratio (2 for retina Macbook)
-            pixel_ratio = browser.execute_script("return window.devicePixelRatio")
-            browser.execute_script(f'document.body.style.webkitTransform = "scale({scale_factor/pixel_ratio})"')
-            browser.execute_script(f'document.body.style.webkitTransformOrigin = "0% 0%"')
-
-            browser.set_window_size((scale_factor / pixel_ratio) * self.layout.width + 16,
-                                    (scale_factor / pixel_ratio) * self.layout.height + 16)
-            png = browser.get_screenshot_as_png()
-
-            b_rect = browser.execute_script(
-                "return document.getElementsByClassName('plot-container')[0].getBoundingClientRect()")
-
-            # Process image
-            image = Image.open(io.BytesIO(png))
-
-            crop_rect = tuple([pixel_ratio * b_rect[c] for c in ['left', 'top', 'right', 'bottom']])
-            image = image.crop(crop_rect)
-            image = ImageOps.expand(image, border=border, fill='white')
-
-            if filename:
-                image.save(filename)
-                return image
-        finally:
-            os.remove(temp_filename)
-            browser.quit()
-
-    def save_image(self, filename, image_type=None):
+        Parameters
+        ----------
+        filename : str
+            Image output file name
+        image_type : str
+            Image file type. One of: 'svg', 'png', 'pdf', or 'ps'. If not set, file type
+            is inferred from the filename extension
+        scale_factor : number
+            (For png image type) Factor by which to increase the number of pixels in each
+            dimension. A scale factor of 1 will result in a image with pixel dimensions
+            (layout.width, layout.height).  A scale factor of 2 will result in an image
+            with dimensions (2*layout.width, 2*layout.height), doubling image's DPI.
+            (Default 2)
+        """
 
         supported_image_types = ['svg', 'png', 'pdf', 'ps']
         supported_types_csv = ', '.join(supported_image_types)
@@ -1153,7 +1134,8 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         # Register request
         self._svg_requests[req_id] = {'filename': filename,
-                                      'image_type': image_type}
+                                      'image_type': image_type,
+                                      'scale_factor': scale_factor}
 
         self._py2js_requestSvg = req_id
         self._py2js_requestSvg = None
@@ -1173,13 +1155,13 @@ class BaseFigureWidget(widgets.DOMWidget):
         svg_bytes = parse.unquote(svg).encode('utf-8')
         filename = req_info['filename']
         image_type = req_info['image_type']
-
+        scale_factor = req_info['scale_factor']
         if image_type == 'svg':
             with open(filename, 'wb') as f:
                 f.write(svg_bytes)
         elif image_type == 'png':
             cairosvg.svg2png(
-                bytestring=svg_bytes, write_to=filename, scale=2)
+                bytestring=svg_bytes, write_to=filename, scale=scale_factor)
         elif image_type == 'pdf':
             cairosvg.svg2pdf(
                 bytestring=svg_bytes, write_to=filename)
