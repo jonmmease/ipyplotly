@@ -6,6 +6,7 @@ import uuid
 from contextlib import contextmanager
 from copy import deepcopy
 from pprint import pprint
+import numbers
 
 from io import StringIO
 import ipywidgets as widgets
@@ -1108,6 +1109,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             (Default 2)
         """
 
+        # Validate / infer image_type
         supported_image_types = ['svg', 'png', 'pdf', 'ps']
         supported_types_csv = ', '.join(supported_image_types)
 
@@ -1129,6 +1131,11 @@ class BaseFigureWidget(widgets.DOMWidget):
                              "Supported image types are: {image_types}"
                              .format(image_type=image_type,
                                      image_types=supported_types_csv))
+
+        # Validate scale_factor
+        if not isinstance(scale_factor, numbers.Number) or scale_factor <= 0:
+            raise ValueError('scale_factor must be a positive number.\n'
+                             '    Received: {scale_factor}'.format(scale_factor=scale_factor))
 
         req_id = str(uuid.uuid1())
 
