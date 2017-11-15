@@ -139,12 +139,13 @@ setup_args = {
     ],
     'install_requires': [
         'ipywidgets>=7.0',
-        'numpy',
-        'pandas',
-        'pillow',
-        'cairosvg'
+        'numpy>=1.13',
+        'pandas>=0.20',
+        'pillow>=4.2',
+        'cairosvg>=2.0.0rc6'
+        'plotly>=2.1'
     ],
-    'packages': find_packages(),
+    'packages': find_packages(exclude=('codegen',)),
     'zip_safe': False,
     'cmdclass': {
         'build_py': js_prerelease(build_py),

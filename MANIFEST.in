@@ -1,1 +1,1 @@
-recursive-include ipyplotly/static *.*
+recursive-exclude codegen *

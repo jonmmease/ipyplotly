@@ -1022,7 +1022,8 @@ class ImageUriValidator(BaseValidator):
             img_bytes = in_mem_file.read()
             base64_encoded_result_bytes = base64.b64encode(img_bytes)
             base64_encoded_result_str = base64_encoded_result_bytes.decode('ascii')
-            v = f'data:image/png;base64,{base64_encoded_result_str}'
+            v = 'data:image/png;base64,{base64_encoded_result_str}'.format(
+                base64_encoded_result_str=base64_encoded_result_str)
         else:
             self.raise_invalid_val(v)
 
