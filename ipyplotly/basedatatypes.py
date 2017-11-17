@@ -119,7 +119,8 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._layout._parent = self
         self._layout_delta = {}
 
-        # Process messagas
+        # Message States
+        # --------------
         self._relayout_in_process = False
         self._waiting_relayout_callbacks = []
 
@@ -127,9 +128,11 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._waiting_restyle_callbacks = []
 
         # View count
+        # ----------
         self._view_count = 0
 
-        # Context manager support
+        # Context manager
+        # ---------------
         self._in_batch_mode = False
         self._batch_style_commands = {}  # type: typ.Dict[int, typ.Dict[str, typ.Any]]
         self._batch_layout_commands = {}  # type: typ.Dict[str, typ.Any]
@@ -137,10 +140,16 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._animation_easing_validator = animation.EasingValidator()
 
         # SVG
+        # ---
         self._svg_requests = {}
 
         # Messages
+        # --------
         self.on_msg(self._handler_messages)
+
+        # Logging
+        # -------
+        self._log_plotly_commands = False
 
     # ### Trait methods ###
     @observe('_js2py_styleDelta')
@@ -261,6 +270,10 @@ class BaseFigureWidget(widgets.DOMWidget):
             for di in reversed(delete_inds):
                 del self._traces_data[di]  # Modify in-place so we don't trigger serialization
 
+            if self._log_plotly_commands:
+                print('Plotly.deleteTraces')
+                pprint(delete_inds, indent=4)
+
             self._py2js_deleteTraces = {'delete_inds': delete_inds,
                                         '_relayout_msg_id ': relayout_msg_id}
             self._py2js_deleteTraces = None
@@ -274,7 +287,14 @@ class BaseFigureWidget(widgets.DOMWidget):
         current_inds = list(range(len(traces_data_post_removal)))
 
         if not all([i1 == i2 for i1, i2 in zip(new_inds, current_inds)]):
-            self._py2js_moveTraces = [current_inds, new_inds]
+
+            move_msg = [current_inds, new_inds]
+
+            if self._log_plotly_commands:
+                print('Plotly.moveTraces')
+                pprint(move_msg, indent=4)
+
+            self._py2js_moveTraces = move_msg
             self._py2js_moveTraces = None
 
             # ### Reorder trace elements ###
@@ -444,11 +464,12 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._last_restyle_msg_id = restyle_msg_id
         self._restyle_in_process = True
 
-        restype_msg = (style, trace_indexes)
-        # print('Restyle (Py->JS)')
-        # pprint(restype_msg)
+        restyle_msg = (style, trace_indexes)
+        if self._log_plotly_commands:
+            print('Plotly.restyle')
+            pprint(restyle_msg, indent=4)
 
-        self._py2js_restyle = restype_msg
+        self._py2js_restyle = restyle_msg
         self._py2js_restyle = None
 
     def _restyle_child(self, child, prop, val):
@@ -505,8 +526,10 @@ class BaseFigureWidget(widgets.DOMWidget):
             traces_data['_restyle_msg_id'] = restyle_msg_id
 
         # Send to front end
-        # print(f'addTraces:')
-        # pprint(new_traces_data)
+        if self._log_plotly_commands:
+            print('Plotly.addTraces')
+            pprint(new_traces_data, indent=4)
+
         add_traces_msg = new_traces_data
         self._py2js_addTraces = add_traces_msg
         self._py2js_addTraces = None
@@ -609,8 +632,10 @@ class BaseFigureWidget(widgets.DOMWidget):
             self._batch_layout_commands[prop] = send_val
 
     def _send_relayout_msg(self, layout):
-        # print('Relayout (Py->JS): {layout}'.format(layout=layout))
 
+        if self._log_plotly_commands:
+            print('Plotly.relayout')
+            pprint(layout, indent=4)
 
         msg_id = self._last_relayout_msg_id + 1
         layout['_relayout_msg_id'] = msg_id
@@ -635,10 +660,8 @@ class BaseFigureWidget(widgets.DOMWidget):
         self.relayout(relayout_data)
 
     def relayout(self, layout):
-        # print(f'Relayout: {layout}')
         relayout_msg = self._perform_relayout_dict(layout)
         if relayout_msg:
-
             self._dispatch_change_callbacks_relayout(relayout_msg)
             self._send_relayout_msg(relayout_msg)
 
@@ -797,8 +820,9 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         update_msg = (style, layout, trace_indexes)
 
-        # print('Update (Py->JS)')
-        # pprint(update_msg)
+        if self._log_plotly_commands:
+            print('Plotly.update')
+            pprint(update_msg, indent=4)
 
         self._py2js_update = update_msg
         self._py2js_update = None
@@ -1060,8 +1084,9 @@ class BaseFigureWidget(widgets.DOMWidget):
                         'traces': trace_indexes},
                        animation_opts]
 
-        # print('Animate (Py->JS)')
-        # pprint(animate_msg)
+        if self._log_plotly_commands:
+            print('Plotly.animate')
+            pprint(animate_msg, indent=4)
 
         self._py2js_animate = animate_msg
         self._py2js_animate = None
