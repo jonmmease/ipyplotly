@@ -11,7 +11,7 @@ def _py_to_js(v, widget_manager):
     elif isinstance(v, (list, tuple)):
         return [_py_to_js(v, widget_manager) for v in v]
     elif isinstance(v, np.ndarray):
-        if v.dtype.kind in ['u', 'i', 'f']:  # (un)signed integer or float
+        if v.ndim == 1 and v.dtype.kind in ['u', 'i', 'f']:  # (un)signed integer or float
             return {'buffer': memoryview(v), 'dtype': str(v.dtype), 'shape': v.shape}
         else:
             return v.tolist()
