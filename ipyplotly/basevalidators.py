@@ -1085,7 +1085,7 @@ class CompoundValidator(BaseValidator):
             # Leave unchanged
             pass
 
-        elif not isinstance(v, str):
+        else:
             self.raise_invalid_val(v)
 
         v._prop_name = self.name
