@@ -55,8 +55,9 @@ def is_array(v):
 
 
 def type_str(v):
-    if isinstance(v, str):
-        return repr(v)
+
+    if isinstance(v, str) and v.startswith('<class '):
+        return repr(v[7:-1])
 
     if not isinstance(v, type):
         v = type(v)

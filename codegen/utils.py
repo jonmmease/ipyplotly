@@ -140,10 +140,10 @@ class PlotlyNode:
         args = dict(name=self.name_property, parent_name=self.parent_dir_str)
 
         if validator_class == CompoundValidator:
-            data_class_str = f"ipyplotly.datatypes.{self.parent_dir_str}.{self.name_class}"
+            data_class_str = f"<class ipyplotly.datatypes.{self.parent_dir_str}.{self.name_class}>"
             extra_args = {'data_class': data_class_str, 'data_docs': self.get_constructor_params_docstring()}
         elif validator_class == CompoundArrayValidator:
-            element_class_str = f"ipyplotly.datatypes.{self.parent_dir_str}.{self.name_class}"
+            element_class_str = f"<class ipyplotly.datatypes.{self.parent_dir_str}.{self.name_class}>"
             extra_args = {'element_class': element_class_str, 'element_docs': self.get_constructor_params_docstring()}
         else:
             extra_args = {n.name_undercase: n.node_data for n in self.simple_attrs}
@@ -182,7 +182,7 @@ class PlotlyNode:
 
     @property
     def is_compound(self) -> bool:
-        return isinstance(self.node_data, dict) and not self.is_simple
+        return isinstance(self.node_data, dict) and not self.is_simple and self.name != 'impliedEdits'
 
     @property
     def is_literal(self) -> bool:
