@@ -22,7 +22,7 @@ def copy_to_contiguous_readonly_numpy_array(v, dtype=None, force_numeric=False):
     if not isinstance(v, np.ndarray):
         new_v = np.array(v, order='C', dtype=dtype)
     else:
-        new_v = v.astype(dtype, order='C')
+        new_v = np.ascontiguousarray(v.copy())
 
     # Handle force numeric param
     # --------------------------
@@ -1082,9 +1082,8 @@ class CompoundValidator(BaseValidator):
             v = self.data_class(**v)
 
         elif isinstance(v, self.data_class):
-            # Leave unchanged
-            pass
-
+            # Copy object
+            v = self.data_class(**v._data)
         else:
             self.raise_invalid_val(v)
 
