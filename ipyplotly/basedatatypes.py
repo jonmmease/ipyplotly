@@ -832,6 +832,7 @@ class BaseFigureWidget(widgets.DOMWidget):
     @observe('_js2py_pointsCallback')
     def handler_plotly_pointsCallback(self, change):
         callback_data = change['new']
+        print(f'pointsCallback: {callback_data}')
         self._js2py_pointsCallback = None
 
         if not callback_data:
@@ -884,6 +885,8 @@ class BaseFigureWidget(widgets.DOMWidget):
             trace_dict['xs'].append(x)
             trace_dict['ys'].append(y)
             trace_dict['point_inds'].append(point_ind)
+
+        # TODO: send empty points event to all traces that were note included
 
         # Dispatch callbacks
         # ------------------

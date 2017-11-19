@@ -607,7 +607,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             }
 
             // Add z if present
-            var hasZ = pointObjects[0].hasOwnProperty('z');
+            var hasZ = pointObjects[0] !== undefined && pointObjects[0].hasOwnProperty('z');
             if (hasZ) {
                 pointsObject['zs'] = new Array(numPoints);
                 for (p = 0; p < numPoints; p++) {
@@ -801,8 +801,7 @@ var FigureView = widgets.DOMWidgetView.extend({
         console.log("plotly_selected");
 
         if (data === null ||
-            data === undefined ||
-            data['points'].length === 0) return;
+            data === undefined) return;
 
         var pyData = {
             'event_type': 'plotly_selected',
