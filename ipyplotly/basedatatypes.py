@@ -832,13 +832,10 @@ class BaseFigureWidget(widgets.DOMWidget):
     @observe('_js2py_pointsCallback')
     def handler_plotly_pointsCallback(self, change):
         callback_data = change['new']
-        print(f'pointsCallback: {callback_data}')
         self._js2py_pointsCallback = None
 
         if not callback_data:
             return
-
-        # TODO: bail if no callbacks are registered
 
         # Get event type
         # --------------
@@ -869,17 +866,17 @@ class BaseFigureWidget(widgets.DOMWidget):
         # Build Trace Points Dictionary
         # -----------------------------
         points_data = callback_data['points']
-        trace_points = {}
+        trace_points = {trace_ind: {'point_inds': [],
+                                    'xs': [],
+                                    'ys': [],
+                                    'trace_name': self._traces[trace_ind].name,
+                                    'trace_index': trace_ind}
+                        for trace_ind in range(len(self._traces))}
+
         for x, y, point_ind, trace_ind in zip(points_data['xs'],
                                                   points_data['ys'],
                                                   points_data['pointNumbers'],
                                                   points_data['curveNumbers']):
-            if trace_ind not in trace_points:
-                trace_points[trace_ind] = {'point_inds': [],
-                                           'xs': [],
-                                           'ys': [],
-                                           'trace_name': self._traces[trace_ind].name,
-                                           'trace_index': trace_ind}
 
             trace_dict = trace_points[trace_ind]
             trace_dict['xs'].append(x)
