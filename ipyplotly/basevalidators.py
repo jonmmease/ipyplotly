@@ -22,7 +22,7 @@ def copy_to_contiguous_readonly_numpy_array(v, dtype=None, force_numeric=False):
     if not isinstance(v, np.ndarray):
         new_v = np.array(v, order='C', dtype=dtype)
     else:
-        new_v = np.ascontiguousarray(v.copy())
+        new_v = np.ascontiguousarray(v.astype(dtype))
 
     # Handle force numeric param
     # --------------------------

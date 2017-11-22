@@ -9,6 +9,7 @@ class CompoundType:
         self.a = a
         self.b = b
         self.c = c
+        self._data = {'a': a, 'b': b, 'c': c}
 
 
 # Fixtures
