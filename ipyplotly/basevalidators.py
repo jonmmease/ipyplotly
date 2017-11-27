@@ -19,14 +19,19 @@ def copy_to_contiguous_readonly_numpy_array(v, dtype=None, force_numeric=False):
     # ------------------------------------------
     # If dtype was not specified then it will be passed to the numpy array constructor as None and the data type
     # will be inferred automatically
+
+    numeric_kinds = ['u', 'i', 'f']
+
     if not isinstance(v, np.ndarray):
         new_v = np.array(v, order='C', dtype=dtype)
-    else:
+    elif v.dtype.kind in numeric_kinds:
         new_v = np.ascontiguousarray(v.astype(dtype))
+    else:
+        new_v = v.copy()
 
-    # Handle force numeric param
+        # Handle force numeric param
     # --------------------------
-    if force_numeric and new_v.dtype.kind not in ['u', 'i', 'f']:  # (un)signed int, or float
+    if force_numeric and new_v.dtype.kind not in numeric_kinds:  # (un)signed int, or float
         raise ValueError('Input value is not numeric and force_numeric parameter set to True')
 
     if dtype != 'unicode':
