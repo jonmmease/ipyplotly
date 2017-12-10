@@ -344,6 +344,11 @@ class BaseFigureWidget(widgets.DOMWidget):
             # kstr may have periods. e.g. foo.bar
             key_path = self._str_to_dict_path(raw_key)
 
+            # Properties with leading underscores passed through as-is
+            if raw_key.startswith('_'):
+                restyle_data[raw_key] = v
+                continue
+
             if not isinstance(v, list):
                 v = [v]
 
@@ -647,7 +652,9 @@ class BaseFigureWidget(widgets.DOMWidget):
     @observe('_js2py_relayout')
     def handler_plotly_relayoutPython(self, change):
         relayout_data = change['new']
-        # print(f'_js2py_relayout: {relayout_data}')
+        # print('Relayout (JS->Py):')
+        # pprint(relayout_data)
+
         self._js2py_relayout = None
 
         if not relayout_data:

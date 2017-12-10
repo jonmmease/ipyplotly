@@ -470,7 +470,6 @@ function js2py_serializer(v, widgetManager) {
 }
 
 function py2js_serializer(v, widgetManager) {
-    console.log(v);
     var res;
     if (Array.isArray(v)) {
         res = new Array(v.length);
@@ -525,6 +524,11 @@ var FigureView = widgets.DOMWidgetView.extend({
         var restyle_msg_id = this.model.get('_last_restyle_msg_id') + 1;
         this.model.set('_last_restyle_msg_id', restyle_msg_id);
         this.touch();
+
+        // Set view UID
+        // ------------
+        this.viewID = randstr();
+        console.log('Created view with id: ' + this.viewID);
 
         // Initialize figure
         // -----------------
@@ -697,6 +701,10 @@ var FigureView = widgets.DOMWidgetView.extend({
             }
         }
 
+        // Add viewID to style
+        data[0]['_view_id'] = this.viewID;
+
+        // Log message
         console.log("plotly_restyle");
         console.log(data);
 
@@ -710,9 +718,6 @@ var FigureView = widgets.DOMWidgetView.extend({
             return
         }
 
-        console.log("plotly_relayout");
-        console.log(data);
-
         // Work around some plotly bugs/limitations
 
         // Sometimes (in scatterGL at least) axis range isn't wrapped in range
@@ -724,17 +729,28 @@ var FigureView = widgets.DOMWidgetView.extend({
             data['yaxis'] = {'range': data['yaxis']}
         }
 
+        // Add viewID
+        data['_view_id'] = this.viewID;
+
+        // Log message
+        console.log("plotly_relayout");
+        console.log(data);
+
         this.model.set('_js2py_relayout', data);
         this.touch();
     },
 
     handle_plotly_update: function (data) {
         if (data !== null && data !== undefined && data.hasOwnProperty('_doNotReportToPy')) {
-            // Relayout originated on the Python side
+            // Update originated on the Python side
             return
         }
 
-        console.log("plotly_relayout");
+        // Add viewID to style element
+        data[0]['_view_id'] = this.viewID;
+
+        // Log message
+        console.log("plotly_update");
         console.log(data);
         this.model.set('_js2py_update', data);
         this.touch();
@@ -908,9 +924,18 @@ var FigureView = widgets.DOMWidgetView.extend({
     do_restyle: function () {
         console.log('do_restyle');
         var data = this.model.get('_py2js_restyle');
+        console.log(data);
         if (data !== null) {
             var style = data[0];
             var trace_indexes = this.model.normalize_trace_indexes(data[1]);
+
+            if (style['_view_id'] === this.viewID) {
+                // Operation originated from this view, don't re-apply it
+                console.log('Skipping restyle for view ' + this.viewID);
+                return
+            } else {
+                console.log('Applying restyle for view ' + this.viewID)
+            }
 
             style['_doNotReportToPy'] = true;
             Plotly.restyle(this.el, style, trace_indexes);
@@ -944,6 +969,14 @@ var FigureView = widgets.DOMWidgetView.extend({
         var data = this.model.get('_py2js_relayout');
         if (data !== null) {
 
+            if (data['_view_id'] === this.viewID) {
+                // Operation originated from this view, don't re-apply it
+                console.log('Skipping relayout for view ' + this.viewID)
+                return
+            } else {
+                console.log('Applying relayout for view ' + this.viewID)
+            }
+
             data['_doNotReportToPy'] = true;
             Plotly.relayout(this.el, data);
 
@@ -967,6 +1000,14 @@ var FigureView = widgets.DOMWidgetView.extend({
             var style = data[0];
             var layout = data[1];
             var trace_indexes = this.model.normalize_trace_indexes(data[2]);
+
+            if (style['_view_id'] === this.viewID) {
+                // Operation originated from this view, don't re-apply it
+                console.log('Skipping update for view ' + this.viewID);
+                return
+            } else {
+                console.log('Applying update for view ' + this.viewID)
+            }
 
             style['_doNotReportToPy'] = true;
             Plotly.update(this.el, style, layout, trace_indexes);
@@ -1129,6 +1170,48 @@ var FigureView = widgets.DOMWidgetView.extend({
         return res
     }
 });
+
+// Copied from Plotly src/lib/index.js (How can we call it?)
+// random string generator
+function randstr(existing, bits, base) {
+    /*
+     * Include number of bits, the base of the string you want
+     * and an optional array of existing strings to avoid.
+     */
+    if(!base) base = 16;
+    if(bits === undefined) bits = 24;
+    if(bits <= 0) return '0';
+
+    var digits = Math.log(Math.pow(2, bits)) / Math.log(base),
+        res = '',
+        i,
+        b,
+        x;
+
+    for(i = 2; digits === Infinity; i *= 2) {
+        digits = Math.log(Math.pow(2, bits / i)) / Math.log(base) * i;
+    }
+
+    var rem = digits - Math.floor(digits);
+
+    for(i = 0; i < Math.floor(digits); i++) {
+        x = Math.floor(Math.random() * base).toString(base);
+        res = x + res;
+    }
+
+    if(rem) {
+        b = Math.pow(base, rem);
+        x = Math.floor(Math.random() * b).toString(base);
+        res = x + res;
+    }
+
+    var parsed = parseInt(res, base);
+    if((existing && (existing.indexOf(res) > -1)) ||
+         (parsed !== Infinity && parsed >= Math.pow(2, bits))) {
+        return randstr(existing, bits, base);
+    }
+    else return res;
+};
 
 module.exports = {
     FigureView : FigureView,
