@@ -741,17 +741,19 @@ var FigureView = widgets.DOMWidgetView.extend({
     },
 
     handle_plotly_update: function (data) {
-        if (data !== null && data !== undefined && data.hasOwnProperty('_doNotReportToPy')) {
+        if (data !== null && data !== undefined &&
+            data['data'][0].hasOwnProperty('_doNotReportToPy')) {
             // Update originated on the Python side
             return
         }
 
         // Add viewID to style element
-        data[0]['_view_id'] = this.viewID;
+        data['data'][0]['_view_id'] = this.viewID;
 
         // Log message
         console.log("plotly_update");
         console.log(data);
+
         this.model.set('_js2py_update', data);
         this.touch();
     },

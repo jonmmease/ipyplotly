@@ -191,26 +191,32 @@ class BaseFigureWidget(widgets.DOMWidget):
                 self._waiting_restyle_callbacks.pop()()
 
     @observe('_js2py_restyle')
-    def handler_plotly_restylePython(self, change):
+    def handler_js2py_restyle(self, change):
         restyle_msg = change['new']
         self._js2py_restyle = None
 
         if not restyle_msg:
             return
 
-        restyle_data = restyle_msg[0]
-        # print('Restyle (JS->Py):')
-        # pprint(restyle_data)
+        self.restyle(*restyle_msg)
 
-        if len(restyle_msg) > 1 and restyle_msg[1] is not None:
-            trace_inds = restyle_msg[1]
-            if not isinstance(trace_inds, (list, tuple)):
-                trace_inds = [trace_inds]
-        else:
-            trace_inds = list(range(len(self.traces)))
+    @observe('_js2py_update')
+    def handler_js2py_update(self, change):
+        update_msg = change['new']
+        self._js2py_update = None
 
-        self.restyle(restyle_data, trace_inds)
-        self._js2py_restyle = None
+        if not update_msg:
+            return
+
+        # print('Update (JS->Py):')
+        # pprint(update_msg)
+
+        style = update_msg['data'][0]
+        trace_indexes = update_msg['data'][1]
+        layout = update_msg['layout']
+
+        self.update(style=style, layout=layout, trace_indexes=trace_indexes)
+
 
     # Traces
     # ------
@@ -650,7 +656,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._py2js_relayout = None
 
     @observe('_js2py_relayout')
-    def handler_plotly_relayoutPython(self, change):
+    def handler_js2py_relayout(self, change):
         relayout_data = change['new']
         # print('Relayout (JS->Py):')
         # pprint(relayout_data)
