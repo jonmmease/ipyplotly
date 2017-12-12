@@ -1117,7 +1117,13 @@ var FigureView = widgets.DOMWidgetView.extend({
     },
 
     create_delta_object: function(data, fullData) {
-        var res = {};
+        var res;
+        if(Array.isArray(fullData)) {
+            res = new Array(fullData.length);
+        } else {
+            res = {};
+        }
+
         if (data === null || data === undefined) {
             data = {};
         }
