@@ -128,7 +128,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
     # {'-' * len(literal_node.name_property)}
     @property
     def {literal_node.name_property}(self) -> {prop_type}:
-        return self['{literal_node.name_property}']\n""")
+        return self._data['{literal_node.name_property}']\n""")
 
         # ### Constructor ###
         buffer.write(f"""
@@ -165,6 +165,21 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
             for literal_node in literal_nodes:
                 buffer.write(f"""
         self._data['{literal_node.name_property}'] = '{literal_node.node_data}'""")
+
+        # ### Self properties description ###
+        buffer.write(f"""
+        
+        # Self properties description
+        # ---------------------------
+        self._prop_descriptions = \"\"\"
+        """)
+
+        buffer.write(compound_node.get_constructor_params_docstring(
+            indent=12,
+            extra_nodes=extra_subtype_nodes))
+
+        buffer.write(f"""
+        \"\"\"""")
 
     return buffer.getvalue()
 
