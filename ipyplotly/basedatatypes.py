@@ -1382,7 +1382,10 @@ class BasePlotlyType:
     _validators = None
 
     # Defaults to help mocking
-    def __init__(self, prop_name):
+    def __init__(self, prop_name, **kwargs):
+
+        ## TODO: error and display prop description if kwargs not empty
+
         self._prop_name = prop_name
         self._validators = {}
         self._compound_props = {}
@@ -1393,6 +1396,10 @@ class BasePlotlyType:
     @property
     def prop_name(self):
         return self._prop_name
+
+    @property
+    def _prop_descriptions(self) -> str:
+        raise NotImplementedError
 
     @property
     def _data(self):
@@ -1703,8 +1710,8 @@ class BasePlotlyType:
 class BaseLayoutHierarchyType(BasePlotlyType):
 
     # _send_relayout analogous to _send_restyle above
-    def __init__(self, prop_name):
-        super().__init__(prop_name)
+    def __init__(self, prop_name, **kwargs):
+        super().__init__(prop_name, **kwargs)
 
     def _send_update(self, prop, val):
         if self.parent:
@@ -1714,24 +1721,25 @@ class BaseLayoutHierarchyType(BasePlotlyType):
 class BaseLayoutType(BaseLayoutHierarchyType):
     _subplotid_prop_names = ['xaxis', 'yaxis', 'geo', 'ternary', 'scene']
     _subplotid_validators = {'xaxis': XaxisValidator,
-                            'yaxis': YaxisValidator,
-                            'geo': GeoValidator,
-                            'ternary': TernaryValidator,
-                            'scene': SceneValidator}
+                             'yaxis': YaxisValidator,
+                             'geo': GeoValidator,
+                             'ternary': TernaryValidator,
+                             'scene': SceneValidator}
 
     _subplotid_prop_re = re.compile('(' + '|'.join(_subplotid_prop_names) + ')(\d+)')
 
     def __init__(self, prop_name, **kwargs):
-        super().__init__(prop_name)
+        # Compute invalid kwargs. Pass to parent for error message
+        invalid_kwargs = {k: v for k, v in kwargs.items()
+                          if not self._subplotid_prop_re.fullmatch(k)}
+        super().__init__(prop_name, **invalid_kwargs)
         self._subplotid_props = {}
         for prop, value in kwargs.items():
             self._set_subplotid_prop(prop, value)
 
     def _set_subplotid_prop(self, prop, value):
+        # We already tested for match in constructor
         match = self._subplotid_prop_re.fullmatch(prop)
-        if match is None:
-            raise TypeError('Invalid Layout keyword argument {k}'.format(k=prop))
-
         subplot_prop = match.group(1)
         suffix_digit = int(match.group(2))
         if suffix_digit in [0, 1]:
@@ -1771,8 +1779,8 @@ class BaseLayoutType(BaseLayoutHierarchyType):
 
 class BaseTraceHierarchyType(BasePlotlyType):
 
-    def __init__(self, prop_name):
-        super().__init__(prop_name)
+    def __init__(self, prop_name, **kwargs):
+        super().__init__(prop_name, **kwargs)
 
     def _send_update(self, prop, val):
         if self.parent:
@@ -1780,8 +1788,8 @@ class BaseTraceHierarchyType(BasePlotlyType):
 
 
 class BaseTraceType(BaseTraceHierarchyType):
-    def __init__(self, prop_name):
-        super().__init__(prop_name)
+    def __init__(self, prop_name, **kwargs):
+        super().__init__(prop_name, **kwargs)
 
         self._hover_callbacks = []
         self._unhover_callbacks = []
