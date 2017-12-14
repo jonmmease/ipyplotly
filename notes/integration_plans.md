@@ -90,3 +90,33 @@ I'll get 2-4 and some of 5 done by the time 1 is finished. Then I'll reach
 out the Chris again, with code to share, and try to meet with the Plotly team
  to hash out a plan for bringing this together with plotly.py.  Maybe I'll 
  even meet up with them in Montreal.
+
+# 12/11/2017 Notes:
+**Object Lists**: Converting to list-like objects from object tuples is not feasible right now. Extend traces not 
+supported on the layout side. I could replace tuples with a custom fixed length list that would support assignment, 
+but that's about all I could change.
+
+Change not recommended
+
+**Animation/frames**: I tried to get this working, but the events emitted on the JS side for JS triggered animations
+don't seem consistent. Sometimes relayout events are emitted as well. It was just flaky. It wouldn't be impossible,
+but would require some bug fixing work in plotly.js as well.
+
+Change not recommended
+
+**Where this stands**
+I don't think it will be possible to replace the graph_obj library with this. Frames won't be supported and object 
+lists will be tuples not lists. 
+
+I do think this library could support all of the features that Dash needs. (Dash doesn't support frames either). So 
+dash could use this library to get improved docstrings and error messages).
+
+But even so, this API has options that Dash doesn't support. So I don't know if that makes sense.
+
+This still might need to be a new library.  
+
+**Updates to make regardless**
+- Support pandas series
+- Support pandas timeseries
+- Better error messages for non-existant compound properties (catch in constructor).
+- Prevent 'animate' from being used in by buttons/sliders.

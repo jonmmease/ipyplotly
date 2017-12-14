@@ -85,7 +85,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
             raw_description = subtype_node.description
             property_description = '\n'.join(textwrap.wrap(raw_description,
                                                            subsequent_indent=' ' * 8,
-                                                           width=119 - 8))
+                                                           width=80 - 8))
 
             # #### Get validator description ####
             validator = subtype_node.validator_instance
@@ -133,12 +133,17 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         # ### Self properties description ###
         buffer.write(f"""
 
+    # property parent name
+    # --------------------
+    @property
+    def _prop_parent(self) -> str:
+        return '{compound_node.parent_dir_str}'
+
     # Self properties description
     # ---------------------------
     @property
     def _prop_descriptions(self) -> str:
-        return \"\"\"
-    """)
+        return \"\"\"\\""")
 
         buffer.write(compound_node.get_constructor_params_docstring(
             indent=8,
@@ -278,8 +283,8 @@ class Figure(BaseFigureWidget):\n""")
             buffer.write(f"""
                 {subtype_node.name_property}={subtype_node.name_property}{'' if is_last else ','}""")
 
-        buffer.write(f"""
-            )""")
+        buffer.write(f""",
+            **kwargs)""")
 
         buffer.write(f"""
         return self.add_traces(new_trace)[0]""")

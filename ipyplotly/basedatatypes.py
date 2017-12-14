@@ -1384,9 +1384,8 @@ class BasePlotlyType:
     # Defaults to help mocking
     def __init__(self, prop_name, **kwargs):
 
-        ## TODO: error and display prop description if kwargs not empty
-
         self._prop_name = prop_name
+        self._raise_on_invalid_property_error(**kwargs)
         self._validators = {}
         self._compound_props = {}
         self._orphan_data = {}  # properties dict for use while object has no parent
@@ -1398,8 +1397,43 @@ class BasePlotlyType:
         return self._prop_name
 
     @property
+    def _prop_parent(self) -> str:
+        raise NotImplementedError
+
+    @property
     def _prop_descriptions(self) -> str:
         raise NotImplementedError
+
+    def __setattr__(self, prop, value):
+        if prop.startswith('_') or hasattr(self, prop):
+            # Let known properties and private properties through
+            super().__setattr__(prop, value)
+        else:
+            # Raise error on unknown public properties
+            self._raise_on_invalid_property_error(**{prop: value})
+
+    def _raise_on_invalid_property_error(self, **kwargs):
+        invalid_props = list(kwargs.keys())
+        if invalid_props:
+            if len(invalid_props) == 1:
+                prop_str = 'property'
+                invalid_str = repr(invalid_props[0])
+            else:
+                prop_str = 'properties'
+                invalid_str = repr(invalid_props)
+
+            if self._prop_parent:
+                full_prop_name = self._prop_parent + '.' + self.prop_name
+            else:
+                full_prop_name = self.prop_name
+
+            raise ValueError("Invalid {prop_str} specified for {full_prop_name}: {invalid_str}\n\n"
+                             "    Valid properties:\n"
+                             "{prop_descriptions}"
+                             .format(prop_str=prop_str,
+                                     full_prop_name=full_prop_name,
+                                     invalid_str=invalid_str,
+                                     prop_descriptions=self._prop_descriptions))
 
     @property
     def _data(self):
