@@ -3,7 +3,7 @@
 dist/
 build/
 *.py[cod]
-node_modules/
+js/node_modules/
 
 # Compiled javascript
 ipyplotly/static/
@@ -15,3 +15,5 @@ ipyplotly/static/
 
 ipyplotly/validators
 ipyplotly/datatypes
+
+**/scratch

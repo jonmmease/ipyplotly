@@ -22,7 +22,7 @@ log.set_verbosity(log.DEBUG)
 log.info('setup.py entered')
 log.info('$PATH=%s' % os.environ['PATH'])
 
-LONG_DESCRIPTION = 'pythonic plotly API for use in Jupyter'
+LONG_DESCRIPTION = 'A pythonic plotly API and ipywidget for use in Jupyter'
 
 def js_prerelease(command, strict=False):
     """decorator for building minified js/css prior to another command"""
@@ -156,7 +156,6 @@ setup_args = {
 
     'author': 'Jon Mease',
     'author_email': 'jon.mease@gmail.com',
-    'url': 'http://jupyter.org',
     'keywords': [
         'ipython',
         'jupyter',
