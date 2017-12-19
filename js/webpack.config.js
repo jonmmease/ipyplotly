@@ -1,9 +1,12 @@
+var path = require('path');
 var version = require('./package.json').version;
 
 // Custom webpack loaders are generally the same for all webpack bundles, hence
 // stored in a separate local variable.
-var loaders = [
-    { test: /\.json$/, loader: 'json-loader' },
+var rules = [
+    { test: /\.css$/, use: ['style-loader', 'css-loader']},
+    { test: /\.json$/, use: 'json-loader' },
+    { test: /\.js$/, use: 'ify-loader' }
 ];
 
 
@@ -19,7 +22,7 @@ module.exports = [
         entry: './src/extension.js',
         output: {
             filename: 'extension.js',
-            path: '../ipyplotly/static',
+            path: path.resolve(__dirname, '..', 'ipyplotly', 'static'),
             libraryTarget: 'amd'
         }
     },
@@ -32,12 +35,15 @@ module.exports = [
         entry: './src/index.js',
         output: {
             filename: 'index.js',
-            path: '../ipyplotly/static',
+            path: path.resolve(__dirname, '..', 'ipyplotly', 'static'),
             libraryTarget: 'amd'
         },
         devtool: 'source-map',
+        node: {
+            fs: 'empty'
+        },
         module: {
-            loaders: loaders
+            rules: rules
         },
         externals: ['@jupyter-widgets/base']
     },
@@ -58,13 +64,16 @@ module.exports = [
         entry: './src/embed.js',
         output: {
             filename: 'index.js',
-            path: './dist/',
+            path: path.resolve(__dirname, 'dist'),
             libraryTarget: 'amd',
             publicPath: 'https://unpkg.com/ipyplotly@' + version + '/dist/'
         },
         devtool: 'source-map',
+        node: {
+            fs: 'empty'
+        },
         module: {
-            loaders: loaders
+            rules: rules
         },
         externals: ['@jupyter-widgets/base']
     }
