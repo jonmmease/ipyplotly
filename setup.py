@@ -8,8 +8,6 @@ import os
 import sys
 import platform
 
-from codegen import perform_codegen
-
 here = os.path.dirname(os.path.abspath(__file__))
 node_root = os.path.join(here, 'js')
 is_repo = os.path.exists(os.path.join(here, '.git'))
@@ -134,6 +132,7 @@ class CodegenCommand(Command):
         pass
 
     def run(self):
+        from codegen import perform_codegen
         perform_codegen()
 
 
