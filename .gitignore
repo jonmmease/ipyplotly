@@ -11,9 +11,17 @@ ipyplotly/static/
 # OS X
 .DS_Store
 
+# PyCharm project
 .idea/
 
+# Generated code
 ipyplotly/validators
 ipyplotly/datatypes
 
+# General scratch directories
 **/scratch
+
+# Examples
+#/examples/overviews/exports/
+#!/examples/overviews/exports/README.md
+
