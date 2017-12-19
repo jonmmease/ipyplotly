@@ -14,8 +14,9 @@ For a development installation (requires npm),
 
     $ git clone https://github.com/jmmease/ipyplotly.git
     $ cd ipyplotly
+    $ pip install yapf
     $ python setup.py codegen
-    $ pip install -e .[dev]
+    $ pip install -e .
     $ jupyter nbextension install --py --symlink --sys-prefix ipyplotly
     $ jupyter nbextension enable --py --sys-prefix ipyplotly
 

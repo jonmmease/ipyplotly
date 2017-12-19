@@ -154,6 +154,7 @@ setup_args = {
             'ipyplotly/static/index.js.map',
         ]),
     ],
+    'python_requires': '>=3.5',
     'install_requires': [
         'ipywidgets>=7.0',
         'numpy>=1.13',
@@ -162,11 +163,6 @@ setup_args = {
         'cairosvg>=2.0.0rc6'
         'plotly>=2.1'
     ],
-    'extras_require': {
-        'dev': [
-            'yapf>=0.20.0',
-        ]
-    },
     'packages': find_packages(exclude=('codegen',)),
     'zip_safe': False,
     'cmdclass': {
