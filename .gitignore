@@ -22,6 +22,6 @@ ipyplotly/datatypes
 **/scratch
 
 # Examples
-#/examples/overviews/exports/
-#!/examples/overviews/exports/README.md
+/examples/overviews/exports/
+!/examples/overviews/exports/README.md
 
