@@ -8,6 +8,8 @@ import os
 import sys
 import platform
 
+from codegen import perform_codegen
+
 here = os.path.dirname(os.path.abspath(__file__))
 node_root = os.path.join(here, 'js')
 is_repo = os.path.exists(os.path.join(here, '.git'))
@@ -120,6 +122,21 @@ class NPM(Command):
         # update package data in case this created new files
         update_package_data(self.distribution)
 
+
+class CodegenCommand(Command):
+    description = 'Generate class hierarchy from Plotly JSON schema'
+    user_options = []
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        perform_codegen()
+
+
 version_ns = {}
 with open(os.path.join(here, 'ipyplotly', '_version.py')) as f:
     exec(f.read(), {}, version_ns)
@@ -152,6 +169,7 @@ setup_args = {
         'egg_info': js_prerelease(egg_info),
         'sdist': js_prerelease(sdist, strict=True),
         'jsdeps': NPM,
+        'codegen': CodegenCommand,
     },
 
     'author': 'Jon Mease',
