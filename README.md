@@ -17,6 +17,7 @@ For a development installation (requires npm),
     $ pip install -e .
     $ pip install yapf
     $ python setup.py codegen
+    $ jupyter nbextension enable --py widgetsnbextension
     $ jupyter nbextension install --py --symlink --sys-prefix ipyplotly
     $ jupyter nbextension enable --py --sys-prefix ipyplotly
 
