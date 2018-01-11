@@ -1558,6 +1558,10 @@ class BasePlotlyType:
     def _vals_equal(v1, v2):
         if isinstance(v1, np.ndarray) or isinstance(v2, np.ndarray):
             return np.array_equal(v1, v2)
+        elif isinstance(v1, dict) or isinstance(v2, dict):
+            # Can't use v1==v2 incase there are numpy arrays inside.
+            # Replace with recursive comparison
+            return False
         else:
             return v1 == v2
 
