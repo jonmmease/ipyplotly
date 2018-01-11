@@ -17,7 +17,9 @@ InputState(ctrl={ctrl},
            shift={shift}, 
            meta={meta}, 
            button={button}, 
-           buttons={buttons})"""
+           buttons={buttons})""".format(
+            ctrl=self._ctrl, alt=self._alt, shift=self._shift,
+            meta=self._meta, button=self._button, buttons=self._buttons)
 
     @property
     def alt(self) -> bool:

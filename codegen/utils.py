@@ -361,11 +361,16 @@ class TraceNode(PlotlyNode):
     @property
     def description(self) -> str:
         if len(self.node_path) == 0:
-            return ""
+            desc = ""
         elif len(self.node_path) == 1:
-            return self.plotly_schema['schema']['traces'][self.node_path[0]]['meta'].get('description', '')
+            desc = self.plotly_schema['schema']['traces'][self.node_path[0]]['meta'].get('description', '')
         else:
-            return self.node_data.get('description', '')
+            desc = self.node_data.get('description', '')
+
+        if isinstance(desc, list):
+            desc = ''.join(desc)
+
+        return desc
 
 
 class LayoutNode(PlotlyNode):
@@ -402,7 +407,10 @@ class LayoutNode(PlotlyNode):
     # -----------
     @property
     def description(self) -> str:
-        return self.node_data.get('description', '')
+        desc = self.node_data.get('description', '')
+        if isinstance(desc, list):
+            desc = ''.join(desc)
+        return desc
 
     # Raw data
     # --------

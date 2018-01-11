@@ -665,6 +665,42 @@ class ColorValidator(BaseValidator):
                 return None
 
 
+class ColorlistValidator(BaseValidator):
+    """
+        "colorlist": {
+          "description": "A list of colors. Must be an {array} containing valid colors.",
+          "requiredOpts": [],
+          "otherOpts": [
+            "dflt"
+          ]
+        }
+    """
+    def __init__(self, name, parent_name, **_):
+        super().__init__(name=name, parent_name=parent_name)
+
+    def description(self):
+        return ("""\
+    The '{name}' property is a colorlist that may be specified as a tuple, list, 
+    or one-dimensional numpy array of valid color strings""".format(name=self.name))
+
+    def validate_coerce(self, v):
+
+        if v is None:
+            # Pass None through
+            pass
+        elif is_array(v):
+            validated_v = [ColorValidator.perform_validate_coerce(e, allow_number=False) for e in v]
+
+            invalid_els = [el for el, validated_el in zip(v, validated_v) if validated_el is None]
+            if invalid_els:
+                self.raise_invalid_elements(invalid_els)
+
+            v = copy_to_contiguous_readonly_numpy_array(validated_v, dtype='unicode')
+        else:
+            self.raise_invalid_val(v)
+        return v
+
+
 class ColorscaleValidator(BaseValidator):
     """
         "colorscale": {

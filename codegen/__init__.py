@@ -12,7 +12,7 @@ def perform_codegen():
     # outdir = 'codegen/output'
     # Load plotly schema
     # ------------------
-    with open('codegen/resources/plotly-schema-v2.json', 'r') as f:
+    with open('codegen/resources/plot-schema.json', 'r') as f:
         plotly_schema = json.load(f)
 
     # Compute property paths
