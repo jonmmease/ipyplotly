@@ -158,8 +158,6 @@ setup_args = {
         'ipywidgets>=7.0',
         'numpy>=1.13',
         'pandas>=0.20',
-        'pillow>=4.2',
-        'cairosvg>=2.0.0rc6',
         'plotly>=2.1'
     ],
     'packages': find_packages(exclude=('codegen',)),

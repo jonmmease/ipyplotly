@@ -1,5 +1,4 @@
 import collections
-import datetime
 import re
 import typing as typ
 import uuid
@@ -7,32 +6,22 @@ from contextlib import contextmanager
 from copy import deepcopy
 from pprint import pprint
 import numbers
+from importlib import import_module
 
-from io import StringIO
 import ipywidgets as widgets
 
 from ipyplotly import animation
 from ipyplotly.basevalidators import CompoundValidator, CompoundArrayValidator
 from ipyplotly.serializers import custom_serializers
-from traitlets import List, Unicode, Dict, default, observe, Integer, Bool, Undefined
+from traitlets import List, Unicode, Dict, observe, Integer, Undefined
 
 from ipyplotly.callbacks import Points, BoxSelector, LassoSelector, InputState
 from ipyplotly.validators.layout import XaxisValidator, YaxisValidator, GeoValidator, TernaryValidator, SceneValidator
 
 from plotly.offline import plot as plotlypy_plot
-from PIL import Image, ImageOps
-import io
-import tempfile
 import os
-import pathlib
 import numpy as np
-
 from urllib import parse
-
-import cairosvg
-
-
-# TODO:
 
 @widgets.register
 class BaseFigureWidget(widgets.DOMWidget):
@@ -1148,6 +1137,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         # Validate / infer image_type
         supported_image_types = ['svg', 'png', 'pdf', 'ps']
+        cairo_image_types = ['png', 'pdf', 'ps']
         supported_types_csv = ', '.join(supported_image_types)
 
         if not image_type:
@@ -1168,6 +1158,15 @@ class BaseFigureWidget(widgets.DOMWidget):
                              "Supported image types are: {image_types}"
                              .format(image_type=image_type,
                                      image_types=supported_types_csv))
+
+        # Validate cairo dependency
+        if image_type in cairo_image_types:
+            # Check whether we have cairosvg available
+            try:
+                import_module('cairosvg')
+            except ModuleNotFoundError:
+                raise ImportError('Exporting to {image_type} requires cairosvg'
+                                  .format(image_type=image_type))
 
         # Validate scale_factor
         if not isinstance(scale_factor, numbers.Number) or scale_factor <= 0:
@@ -1203,15 +1202,19 @@ class BaseFigureWidget(widgets.DOMWidget):
         if image_type == 'svg':
             with open(filename, 'wb') as f:
                 f.write(svg_bytes)
-        elif image_type == 'png':
-            cairosvg.svg2png(
-                bytestring=svg_bytes, write_to=filename, scale=scale_factor)
-        elif image_type == 'pdf':
-            cairosvg.svg2pdf(
-                bytestring=svg_bytes, write_to=filename)
-        elif image_type == 'ps':
-            cairosvg.svg2ps(
-                bytestring=svg_bytes, write_to=filename)
+        else:
+            # We already made sure cairosvg is available in save_image
+            cairosvg = import_module('cairosvg')
+
+            if image_type == 'png':
+                cairosvg.svg2png(
+                    bytestring=svg_bytes, write_to=filename, scale=scale_factor)
+            elif image_type == 'pdf':
+                cairosvg.svg2pdf(
+                    bytestring=svg_bytes, write_to=filename)
+            elif image_type == 'ps':
+                cairosvg.svg2ps(
+                    bytestring=svg_bytes, write_to=filename)
 
     # Custom Messages
     # ---------------

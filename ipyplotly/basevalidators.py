@@ -2,14 +2,13 @@ import base64
 import numbers
 import textwrap
 import uuid
+from importlib import import_module
 
 import io
 from copy import deepcopy
 
 import numpy as np
 import re
-from PIL import Image
-
 
 # Utility functions
 # -----------------
@@ -997,6 +996,13 @@ class InfoArrayValidator(BaseValidator):
 
 
 class ImageUriValidator(BaseValidator):
+    _PIL = None
+
+    try:
+        _PIL = import_module('PIL')
+    except ModuleNotFoundError:
+        pass
+
     def __init__(self, name, parent_name, **_):
         super().__init__(name=name, parent_name=parent_name)
 
@@ -1020,7 +1026,7 @@ class ImageUriValidator(BaseValidator):
             #   - Detect filesystem system paths and convert to URI
             #   - Validate either url or data uri
             pass
-        elif isinstance(v, Image.Image):
+        elif self._PIL and isinstance(v, self._PIL.Image.Image):
             # Convert PIL image to png data uri string
             in_mem_file = io.BytesIO()
             v.save(in_mem_file, format="PNG")
