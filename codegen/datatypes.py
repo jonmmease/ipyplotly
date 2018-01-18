@@ -8,7 +8,7 @@ from codegen.utils import TraceNode, format_source, PlotlyNode
 
 
 def get_typing_type(plotly_type, array_ok=False):
-    if plotly_type in ('data_array', 'info_array'):
+    if plotly_type in ('data_array', 'info_array', 'colorlist'):
         pytype = 'List'
     elif plotly_type in ('string', 'color', 'colorscale', 'subplotid'):
         pytype = 'str'

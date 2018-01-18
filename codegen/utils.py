@@ -311,7 +311,7 @@ class PlotlyNode:
 
     @staticmethod
     def get_all_trace_layout_nodes(plotly_schema) -> Dict[str, 'LayoutNode']:
-        trace_names = plotly_schema['schema']['traces'].keys()
+        trace_names = plotly_schema['traces'].keys()
 
         datatype_nodes = {}
         nodes_to_process = [TraceLayoutNode(plotly_schema, trace_name)
@@ -348,9 +348,9 @@ class TraceNode(PlotlyNode):
     @property
     def node_data(self) -> dict:
         if not self.node_path:
-            node_data = self.plotly_schema['schema']['traces']
+            node_data = self.plotly_schema['traces']
         else:
-            node_data = self.plotly_schema['schema']['traces'][self.node_path[0]]['attributes']
+            node_data = self.plotly_schema['traces'][self.node_path[0]]['attributes']
             for prop_name in self.node_path[1:]:
                 node_data = node_data[prop_name]
 
@@ -361,11 +361,16 @@ class TraceNode(PlotlyNode):
     @property
     def description(self) -> str:
         if len(self.node_path) == 0:
-            return ""
+            desc = ""
         elif len(self.node_path) == 1:
-            return self.plotly_schema['schema']['traces'][self.node_path[0]]['meta'].get('description', '')
+            desc = self.plotly_schema['traces'][self.node_path[0]]['meta'].get('description', '')
         else:
-            return self.node_data.get('description', '')
+            desc = self.node_data.get('description', '')
+
+        if isinstance(desc, list):
+            desc = ''.join(desc)
+
+        return desc
 
 
 class LayoutNode(PlotlyNode):
@@ -402,13 +407,16 @@ class LayoutNode(PlotlyNode):
     # -----------
     @property
     def description(self) -> str:
-        return self.node_data.get('description', '')
+        desc = self.node_data.get('description', '')
+        if isinstance(desc, list):
+            desc = ''.join(desc)
+        return desc
 
     # Raw data
     # --------
     @property
     def node_data(self) -> dict:
-        node_data = self.plotly_schema['schema']['layout']
+        node_data = self.plotly_schema['layout']
         for prop_name in self.node_path:
             node_data = node_data[prop_name]
 
@@ -445,7 +453,7 @@ class TraceLayoutNode(LayoutNode):
     @property
     def node_data(self) -> dict:
         try:
-            node_data = (self.plotly_schema['schema']['traces']
+            node_data = (self.plotly_schema['traces']
                          [self.trace_name]['layoutAttributes'])
 
             for prop_name in self.node_path:
