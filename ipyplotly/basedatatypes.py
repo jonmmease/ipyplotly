@@ -1612,6 +1612,7 @@ class BasePlotlyType:
                 if prop in self._data:
                     self._data.pop(prop)
             else:
+                self._init_data()
                 self._data[prop] = new_dict_val
 
         # Send update if there was a change in value
@@ -1658,6 +1659,7 @@ class BasePlotlyType:
                 if prop in self._data:
                     self._data.pop(prop)
             else:
+                self._init_data()
                 self._data[prop] = new_dict_vals
 
         # Send update if there was a change in value
