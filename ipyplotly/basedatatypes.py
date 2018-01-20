@@ -206,6 +206,23 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         self.update(style=style, layout=layout, trace_indexes=trace_indexes)
 
+    # Magic Methods
+    # -------------
+    def __setitem__(self, prop, value):
+        if prop == 'data':
+            self.data = value
+        elif prop == 'layout':
+            self.layout = value
+        else:
+            raise KeyError(prop)
+
+    def __getitem__(self, prop):
+        if prop == 'data':
+            return self.data
+        elif prop == 'layout':
+            return self.layout
+        else:
+            raise KeyError(prop)
 
     # Data
     # ----
