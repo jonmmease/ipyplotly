@@ -66,7 +66,7 @@ def test_set_get_compound_property(plotly_obj):
     assert plotly_obj._orphan_data == {'prop1': {'a': 23}}
 
     # ### _data is mapped to _orphan_data
-    assert plotly_obj._data is plotly_obj._orphan_data
+    assert plotly_obj._props is plotly_obj._orphan_data
 
     # ### validator called properly ###
     plotly_obj._validators['prop1'].validate_coerce.assert_called_once_with(v)
@@ -101,7 +101,7 @@ def test_set_get_property_with_parent(plotly_obj, parent):
 
     # Parent Assertions
     # -----------------
-    parent._get_child_data.assert_called_with(plotly_obj)
+    parent._get_child_props.assert_called_with(plotly_obj)
 
     # Object Assertions
     # -----------------
@@ -115,7 +115,7 @@ def test_set_get_property_with_parent(plotly_obj, parent):
     assert plotly_obj._orphan_data == {}
 
     # ### _data bound to parent dict ###
-    assert parent._get_child_data(plotly_obj) is plotly_obj._data
+    assert parent._get_child_props(plotly_obj) is plotly_obj._props
 
     # ### validator called properly ###
     plotly_obj._validators['prop1'].validate_coerce.assert_called_once_with(v)

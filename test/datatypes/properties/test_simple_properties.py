@@ -48,10 +48,10 @@ def test_set_get_property_orphan(plotly_obj):
     plotly_obj._send_update.assert_called_once_with('prop1', 'Hello')
 
     # ### _orphan_data configured properly ###
-    assert plotly_obj._orphan_data == {'prop1': 'Hello'}
+    assert plotly_obj._orphan_props == {'prop1': 'Hello'}
 
-    # ### _data is mapped to _orphan_data
-    assert plotly_obj._data is plotly_obj._orphan_data
+    # ### _props is mapped to _orphan_props
+    assert plotly_obj._props is plotly_obj._orphan_props
 
     # ### validator called properly ###
     plotly_obj._validators['prop1'].validate_coerce.assert_called_once_with('Hello')
@@ -71,21 +71,21 @@ def test_set_get_property_with_parent(plotly_obj, parent):
 
     # Parent Assertions
     # -----------------
-    parent._get_child_data.assert_called_with(plotly_obj)
+    parent._get_child_props.assert_called_with(plotly_obj)
 
     # Child Assertions
     # ----------------
     # ### test get ###
     assert plotly_obj['prop1'] == 'Hello'
 
-    # ### _data bound to parent dict ###
-    assert parent._get_child_data(plotly_obj) is plotly_obj._data
+    # ### _props bound to parent dict ###
+    assert parent._get_child_props(plotly_obj) is plotly_obj._props
 
     # ### _send_update sent ###
     plotly_obj._send_update.assert_called_once_with('prop1', 'Hello')
 
     # ### Orphan data cleared ###
-    assert plotly_obj._orphan_data == {}
+    assert plotly_obj._orphan_props == {}
 
     # ### validator called properly ###
     plotly_obj._validators['prop1'].validate_coerce.assert_called_once_with('Hello')

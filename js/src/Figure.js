@@ -13,8 +13,8 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         _model_module: 'ipyplotly',
         _view_module: 'ipyplotly',
 
-        _traces_data: [],
-        _layout_data: {}, // Not synced to python side
+        _data: [],
+        _layout: {}, // Not synced to python side
 
         // Message properties
         _py2js_addTraces: null,
@@ -96,7 +96,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
     normalize_trace_indexes: function (trace_indexes) {
         if (trace_indexes === null || trace_indexes === undefined) {
-            var numTraces = this.get('_traces_data').length;
+            var numTraces = this.get('_data').length;
             trace_indexes = Array.apply(null, new Array(numTraces)).map(function (_, i) {return i;});
         }
         if (!Array.isArray(trace_indexes)) {
@@ -115,7 +115,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
         if (data !== null) {
             console.log(data);
-            var tracesData = this.get('_traces_data');
+            var tracesData = this.get('_data');
             _.forEach(data, function (traceData) {
                 tracesData.push(traceData);
             })
@@ -128,7 +128,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         console.log('Figure Model: do_deleteTraces');
         if (data !== null) {
             var delete_inds = data['delete_inds'];
-            var tracesData = this.get('_traces_data');
+            var tracesData = this.get('_data');
 
             // Remove del inds in reverse order so indexes remain valid throughout loop
             delete_inds.slice().reverse().forEach(function (del_ind) {
@@ -146,7 +146,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         if (move_data !== null) {
             var currentInds = move_data[0];
             var newInds = move_data[1];
-            var tracesData = this.get('_traces_data');
+            var tracesData = this.get('_data');
 
             // ### Remove by curr_inds in reverse order ###
             var movingTracesData = [];
@@ -196,7 +196,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
             for (var i = 0; i < trace_indexes.length; i++) {
                 var trace_ind = trace_indexes[i];
-                var valParent = this.get('_traces_data')[trace_ind];
+                var valParent = this.get('_data')[trace_ind];
 
                 for (var kp = 0; kp < keyPath.length-1; kp++) {
                     var keyPathEl = keyPath[kp];
@@ -249,12 +249,12 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         if (data !== null) {
             console.log(data);
             this._performRelayout(data);
-            console.log(this.get('_layout_data'))
+            console.log(this.get('_layout'))
         }
     },
 
     _performRelayout: function (relayout_data) {
-        this._performRelayoutLike(relayout_data, this.get('_layout_data'))
+        this._performRelayoutLike(relayout_data, this.get('_layout'))
     },
 
     _performRelayoutLike: function (relayout_data, parent_data) {
@@ -340,7 +340,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
             for (var i = 0; i < styles.length; i++) {
                 var style = styles[i];
                 var trace_index = trace_indexes[i];
-                var trace = this.get('_traces_data')[trace_index];
+                var trace = this.get('_data')[trace_index];
                 this._performRelayoutLike(style, trace);
             }
 
@@ -353,11 +353,11 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         console.log('FigureModel:do_removeLayoutProps');
         var data = this.get('_py2js_removeLayoutProps');
         if (data !== null) {
-            console.log(this.get('_layout_data'));
+            console.log(this.get('_layout'));
             for(var i=0; i < data.length; i++) {
 
                 var keyPath = data[i];
-                var valParent = this.get('_layout_data');
+                var valParent = this.get('_layout');
 
                 for (var kp = 0; kp < keyPath.length - 1; kp++) {
                     var keyPathEl = keyPath[kp];
@@ -375,7 +375,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
                     }
                 }
             }
-            console.log(this.get('_layout_data'));
+            console.log(this.get('_layout'));
         }
     },
 
@@ -393,7 +393,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
                 for (var i = 0; i < trace_indexes.length; i++) {
                     var trace_ind = trace_indexes[i];
-                    var valParent = this.get('_traces_data')[trace_ind];
+                    var valParent = this.get('_data')[trace_ind];
 
                     for (var kp = 0; kp < keyPath.length - 1; kp++) {
                         var keyPathEl = keyPath[kp];
@@ -416,8 +416,8 @@ var FigureModel = widgets.DOMWidgetModel.extend({
     }
 }, {
     serializers: _.extend({
-        _traces_data: { deserialize: py2js_serializer, serialize: js2py_serializer},
-        _layout_data: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _data: { deserialize: py2js_serializer, serialize: js2py_serializer},
+        _layout: { deserialize: py2js_serializer, serialize: js2py_serializer},
         _py2js_addTraces: { deserialize: py2js_serializer, serialize: js2py_serializer},
         _py2js_deleteTraces: { deserialize: py2js_serializer, serialize: js2py_serializer},
         _py2js_moveTraces: { deserialize: py2js_serializer, serialize: js2py_serializer},
@@ -533,17 +533,17 @@ var FigureView = widgets.DOMWidgetView.extend({
         // Initialize figure
         // -----------------
         console.log('render');
-        console.log(this.model.get('_traces_data'));
-        console.log(this.model.get('_layout_data'));
+        console.log(this.model.get('_data'));
+        console.log(this.model.get('_layout'));
 
         // Clone traces and layout so plotly instances in the views don't mutate the model
-        var initial_traces = JSON.parse(JSON.stringify(this.model.get('_traces_data')));
-        var initial_layout = JSON.parse(JSON.stringify(this.model.get('_layout_data')));
+        var initial_traces = JSON.parse(JSON.stringify(this.model.get('_data')));
+        var initial_layout = JSON.parse(JSON.stringify(this.model.get('_layout')));
 
         Plotly.plot(this.el, initial_traces, initial_layout).then(function () {
 
             // Update layout
-            var relayoutDelta = that.create_delta_object(that.model.get('_layout_data'), that.getFullLayout());
+            var relayoutDelta = that.create_delta_object(that.model.get('_layout'), that.getFullLayout());
             relayoutDelta['_relayout_msg_id'] = relayout_msg_id;
             that.model.set('_js2py_layoutDelta', relayoutDelta);
 
@@ -862,7 +862,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             Plotly.addTraces(this.el, data).then(function () {
                 // Loop over new traces
                 var traceDeltas = new Array(data.length);
-                var tracesData = that.model.get('_traces_data');
+                var tracesData = that.model.get('_data');
                 var fullData = that.getFullData();
                 var restyle_msg_id = data[0]['_restyle_msg_id'];
                 var relayout_msg_id = data[0]['_relayout_msg_id'];
@@ -878,7 +878,7 @@ var FigureView = widgets.DOMWidgetView.extend({
 
 
                 // Update layout
-                var layoutDelta = that.create_delta_object(that.model.get('_layout_data'), that.getFullLayout());
+                var layoutDelta = that.create_delta_object(that.model.get('_layout'), that.getFullLayout());
                 layoutDelta['_relayout_msg_id'] = relayout_msg_id;
                 that.model.set('_js2py_layoutDelta', layoutDelta);
                 console.log(layoutDelta);
@@ -899,7 +899,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             var that = this;
             Plotly.deleteTraces(this.el, delete_inds).then(function () {
                 // Send back layout delta
-                var relayoutDelta = that.create_delta_object(that.model.get('_layout_data'), that.getFullLayout());
+                var relayoutDelta = that.create_delta_object(that.model.get('_layout'), that.getFullLayout());
                 relayoutDelta['_relayout_msg_id'] = relayout_msg_id;
                 that.model.set('_js2py_layoutDelta', relayoutDelta);
                 that.touch();
@@ -949,7 +949,7 @@ var FigureView = widgets.DOMWidgetView.extend({
 
             // Send back style delta
             var traceDeltas = new Array(trace_indexes.length);
-            var trace_data = this.model.get('_traces_data');
+            var trace_data = this.model.get('_data');
             var fullData = this.getFullData();
             for (var i = 0; i < trace_indexes.length; i++) {
                 traceDeltas[i] = this.create_delta_object(trace_data[trace_indexes[i]], fullData[trace_indexes[i]]);
@@ -960,7 +960,7 @@ var FigureView = widgets.DOMWidgetView.extend({
 
             // Send back layout delta
             var relayout_msg_id = style['_relayout_msg_id'];
-            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
+            var relayoutDelta = this.create_delta_object(this.model.get('_layout'), this.getFullLayout());
             relayoutDelta['_relayout_msg_id'] = relayout_msg_id;
             this.model.set('_js2py_layoutDelta', relayoutDelta);
 
@@ -984,13 +984,13 @@ var FigureView = widgets.DOMWidgetView.extend({
             data['_doNotReportToPy'] = true;
             Plotly.relayout(this.el, data);
 
-            var layoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
+            var layoutDelta = this.create_delta_object(this.model.get('_layout'), this.getFullLayout());
 
             // Add message id
             layoutDelta['_relayout_msg_id'] = data['_relayout_msg_id'];
 
             console.log(layoutDelta);
-            console.log(this.model.get('_layout_data'));
+            console.log(this.model.get('_layout'));
             this.model.set('_js2py_layoutDelta', layoutDelta);
 
             this.touch();
@@ -1022,7 +1022,7 @@ var FigureView = widgets.DOMWidgetView.extend({
 
             // Send back style delta
             var traceDeltas = new Array(trace_indexes.length);
-            var trace_data = this.model.get('_traces_data');
+            var trace_data = this.model.get('_data');
             var fullData = this.getFullData();
             for (var i = 0; i < trace_indexes.length; i++) {
                 traceDeltas[i] = this.create_delta_object(trace_data[trace_indexes[i]], fullData[trace_indexes[i]]);
@@ -1032,7 +1032,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             this.model.set('_js2py_styleDelta', traceDeltas);
 
             // Send back layout delta
-            var relayoutDelta = this.create_delta_object(this.model.get('_layout_data'), this.getFullLayout());
+            var relayoutDelta = this.create_delta_object(this.model.get('_layout'), this.getFullLayout());
             relayoutDelta['_relayout_msg_id'] = relayout_msg_id;
             this.model.set('_js2py_layoutDelta', relayoutDelta);
 
@@ -1058,7 +1058,7 @@ var FigureView = widgets.DOMWidgetView.extend({
             Plotly.animate(this.el, animationData, animationOpts).then(function () {
                 // Send back style delta
                 var traceDeltas = new Array(trace_indexes.length);
-                var trace_data = that.model.get('_traces_data');
+                var trace_data = that.model.get('_data');
                 var fullData = that.getFullData();
                 for (var i = 0; i < trace_indexes.length; i++) {
                     var restyle_msg_id = styles[i]['_restyle_msg_id'];
@@ -1070,7 +1070,7 @@ var FigureView = widgets.DOMWidgetView.extend({
 
                 // Send back layout delta
                 var relayout_msg_id = layout['_relayout_msg_id'];
-                var relayoutDelta = that.create_delta_object(that.model.get('_layout_data'), that.getFullLayout());
+                var relayoutDelta = that.create_delta_object(that.model.get('_layout'), that.getFullLayout());
                 relayoutDelta['_relayout_msg_id'] = relayout_msg_id;
                 that.model.set('_js2py_layoutDelta', relayoutDelta);
 

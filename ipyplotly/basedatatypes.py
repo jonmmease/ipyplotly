@@ -35,8 +35,8 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # Data properties for front end
     # Note: These are only automatically synced on full assignment, not on mutation
-    _layout_data = Dict().tag(sync=True, **custom_serializers)
-    _traces_data = List().tag(sync=True, **custom_serializers)
+    _layout = Dict().tag(sync=True, **custom_serializers)
+    _data = List().tag(sync=True, **custom_serializers)
 
     # Python -> JS message properties
     _py2js_addTraces = List(trait=Dict(),
@@ -70,25 +70,25 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     # Constructor
     # -----------
-    def __init__(self, traces=None, layout=None, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, data=None, layout=None):
+        super().__init__()
 
         # Traces
         # ------
         from ipyplotly.validators import TracesValidator
-        self._traces_validator = TracesValidator()
+        self._data_validator = TracesValidator()
 
-        if traces is None:
-            self._traces = ()  # type: typ.Tuple[BaseTraceHierarchyType]
-            self._traces_deltas = []
+        if data is None:
+            self._data_objs = ()  # type: typ.Tuple[BaseTraceHierarchyType]
+            self._data_defaults = []
         else:
-            traces = self._traces_validator.validate_coerce(traces)
+            data = self._data_validator.validate_coerce(data)
 
-            self._traces = traces
-            self._traces_deltas = [{} for trace in traces]
-            self._traces_data = [deepcopy(trace._data) for trace in traces]
-            for trace in traces:
-                trace._orphan_data.clear()
+            self._data_objs = data
+            self._data_defaults = [{} for trace in data]
+            self._data = [deepcopy(trace._props) for trace in data]
+            for trace in data:
+                trace._orphan_props.clear()
                 trace._parent = self
 
         # Layout
@@ -103,10 +103,10 @@ class BaseFigureWidget(widgets.DOMWidget):
         else:
             layout = self._layout_validator.validate_coerce(layout)
 
-        self._layout = layout
-        self._layout_data = deepcopy(self._layout._data)
-        self._layout._parent = self
-        self._layout_delta = {}
+        self._layout_obj = layout
+        self._layout = deepcopy(self._layout_obj._props)
+        self._layout_obj._parent = self
+        self._layout_defaults = {}
 
         # Message States
         # --------------
@@ -159,12 +159,12 @@ class BaseFigureWidget(widgets.DOMWidget):
                 # pprint(delta)
                 # print('Processing styleDelta')
 
-                trace_uids = [trace.uid for trace in self.traces]
+                trace_uids = [trace.uid for trace in self.data]
                 trace_index = trace_uids.index(trace_uid)
-                uid_trace = self.traces[trace_index]
-                delta_transform = BaseFigureWidget.transform_data(uid_trace._delta, delta)
+                uid_trace = self.data[trace_index]
+                delta_transform = BaseFigureWidget.transform_data(uid_trace._prop_defaults, delta)
 
-                removed_props = self.remove_overlapping_props(uid_trace._data, uid_trace._delta)
+                removed_props = self.remove_overlapping_props(uid_trace._props, uid_trace._prop_defaults)
 
                 if removed_props:
                     # print(f'Removed_props: {removed_props}')
@@ -207,18 +207,18 @@ class BaseFigureWidget(widgets.DOMWidget):
         self.update(style=style, layout=layout, trace_indexes=trace_indexes)
 
 
-    # Traces
-    # ------
+    # Data
+    # ----
     @property
-    def traces(self) -> typ.Tuple['BaseTraceType']:
-        return self._traces
+    def data(self) -> typ.Tuple['BaseTraceType']:
+        return self._data_objs
 
-    @traces.setter
-    def traces(self, new_traces):
+    @data.setter
+    def data(self, new_data):
 
-        # Validate new_traces
-        orig_uids = [_trace['uid'] for _trace in self._traces_data]
-        new_uids = [trace.uid for trace in new_traces]
+        # Validate new_data
+        orig_uids = [_trace['uid'] for _trace in self._data]
+        new_uids = [trace.uid for trace in new_data]
 
         invalid_uids = set(new_uids).difference(set(orig_uids))
         if invalid_uids:
@@ -238,23 +238,23 @@ class BaseFigureWidget(widgets.DOMWidget):
         # Compute traces to remove
         remove_uids = set(orig_uids).difference(set(new_uids))
         delete_inds = []
-        for i, _trace in enumerate(self._traces_data):
+        for i, _trace in enumerate(self._data):
             if _trace['uid'] in remove_uids:
                 delete_inds.append(i)
 
                 # Unparent trace object to be removed
-                old_trace = self.traces[i]
-                old_trace._orphan_data.update(deepcopy(self.traces[i]._data))
+                old_trace = self.data[i]
+                old_trace._orphan_props.update(deepcopy(self.data[i]._props))
                 old_trace._parent = None
 
         # Compute trace data list after removal
-        traces_data_post_removal = [t for t in self._traces_data]
-        traces_deltas_post_removal = [t for t in self._traces_deltas]
-        orig_uids_post_removal = [trace_data['uid'] for trace_data in self._traces_data]
+        traces_props_post_removal = [t for t in self._data]
+        traces_prop_defaults_post_removal = [t for t in self._data_defaults]
+        orig_uids_post_removal = [trace_data['uid'] for trace_data in self._data]
 
         for i in reversed(delete_inds):
-            del traces_data_post_removal[i]
-            del traces_deltas_post_removal[i]
+            del traces_props_post_removal[i]
+            del traces_prop_defaults_post_removal[i]
             del orig_uids_post_removal[i]
 
         if delete_inds:
@@ -263,7 +263,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             self._relayout_in_process = True
 
             for di in reversed(delete_inds):
-                del self._traces_data[di]  # Modify in-place so we don't trigger serialization
+                del self._data[di]  # Modify in-place so we don't trigger serialization
 
             if self._log_plotly_commands:
                 print('Plotly.deleteTraces')
@@ -279,7 +279,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         for uid in orig_uids_post_removal:
             new_inds.append(new_uids.index(uid))
 
-        current_inds = list(range(len(traces_data_post_removal)))
+        current_inds = list(range(len(traces_props_post_removal)))
 
         if not all([i1 == i2 for i1, i2 in zip(new_inds, current_inds)]):
 
@@ -300,25 +300,25 @@ class BaseFigureWidget(widgets.DOMWidget):
             moving_traces_data = []
             for ci in reversed(current_inds):
                 # Push moving traces data to front of list
-                moving_traces_data.insert(0, self._traces_data[ci])
-                del self._traces_data[ci]
+                moving_traces_data.insert(0, self._data[ci])
+                del self._data[ci]
 
             # #### Sort new_inds and moving_traces_data by new_inds ####
             new_inds, moving_traces_data = zip(*sorted(zip(new_inds, moving_traces_data)))
 
             # #### Insert by new_inds in forward order ####
             for ni, trace_data in zip(new_inds, moving_traces_data):
-                self._traces_data.insert(ni, trace_data)
+                self._data.insert(ni, trace_data)
 
             # pprint(self._traces_data)
 
         # Update _traces order
-        self._traces_deltas = [_trace for i, _trace in sorted(zip(new_inds, traces_deltas_post_removal))]
-        self._traces = tuple(new_traces)
+        self._data_defaults = [_trace for i, _trace in sorted(zip(new_inds, traces_prop_defaults_post_removal))]
+        self._data_objs = tuple(new_data)
 
     def restyle(self, style, trace_indexes=None):
         if trace_indexes is None:
-            trace_indexes = list(range(len(self.traces)))
+            trace_indexes = list(range(len(self.data)))
 
         if not isinstance(trace_indexes, (list, tuple)):
             trace_indexes = [trace_indexes]
@@ -354,9 +354,9 @@ class BaseFigureWidget(widgets.DOMWidget):
                 restyle_msg_vs = []
                 any_vals_changed = False
                 for i, trace_ind in enumerate(trace_indexes):
-                    if trace_ind >= len(self._traces_data):
+                    if trace_ind >= len(self._data):
                         raise ValueError('Trace index {trace_ind} out of range'.format(trace_ind=trace_ind))
-                    val_parent = self._traces_data[trace_ind]
+                    val_parent = self._data[trace_ind]
                     for kp, key_path_el in enumerate(key_path[:-1]):
 
                         # Extend val_parent list if needed
@@ -415,7 +415,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
             for trace_ind in trace_indexes:
 
-                parent_obj = self.traces[trace_ind]
+                parent_obj = self.data[trace_ind]
                 key_path_so_far = ()
                 keys_left = key_path
 
@@ -474,7 +474,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     def _restyle_child(self, child, prop, val):
 
-        trace_index = self.traces.index(child)
+        trace_index = self.data.index(child)
 
         if not self._in_batch_mode:
             send_val = [val]
@@ -486,31 +486,31 @@ class BaseFigureWidget(widgets.DOMWidget):
                 self._batch_style_commands[trace_index] = {}
             self._batch_style_commands[trace_index][prop] = val
 
-    def add_traces(self, traces: typ.List['BaseTraceHierarchyType']):
+    def add_traces(self, data: typ.List['BaseTraceType']):
 
         if self._in_batch_mode:
             self._batch_layout_commands.clear()
             self._batch_style_commands.clear()
             raise ValueError('Traces may not be added in a batch context')
 
-        if not isinstance(traces, (list, tuple)):
-            traces = [traces]
+        if not isinstance(data, (list, tuple)):
+            data = [data]
 
         # Validate
-        traces = self._traces_validator.validate_coerce(traces)
+        data = self._data_validator.validate_coerce(data)
 
         # Make deep copy of trace data (Optimize later if needed)
-        new_traces_data = [deepcopy(trace._data) for trace in traces]
+        new_traces_data = [deepcopy(trace._props) for trace in data]
 
         # Update trace parent
-        for trace in traces:
+        for trace in data:
             trace._parent = self
-            trace._orphan_data.clear()
+            trace._orphan_props.clear()
 
         # Update python side
-        self._traces_data.extend(new_traces_data)  # append instead of assignment so we don't trigger serialization
-        self._traces_deltas = self._traces_deltas + [{} for trace in traces]
-        self._traces = self._traces + traces
+        self._data.extend(new_traces_data)  # append instead of assignment so we don't trigger serialization
+        self._data_defaults = self._data_defaults + [{} for trace in data]
+        self._data_objs = self._data_objs + data
 
         # Update messages
         relayout_msg_id = self._last_relayout_msg_id + 1
@@ -534,35 +534,35 @@ class BaseFigureWidget(widgets.DOMWidget):
         self._py2js_addTraces = add_traces_msg
         self._py2js_addTraces = None
 
-        return traces
+        return data
 
-    def _get_child_data(self, child):
+    def _get_child_props(self, child):
         try:
-            trace_index = self.traces.index(child)
+            trace_index = self.data.index(child)
         except ValueError as _:
             trace_index = None
 
         if trace_index is not None:
-            return self._traces_data[trace_index]
+            return self._data[trace_index]
         elif child is self.layout:
-            return self._layout_data
+            return self._layout
         else:
             raise ValueError('Unrecognized child: %s' % child)
 
-    def _get_child_delta(self, child):
+    def _get_child_prop_defaults(self, child):
         try:
-            trace_index = self.traces.index(child)
+            trace_index = self.data.index(child)
         except ValueError as _:
             trace_index = None
 
         if trace_index is not None:
-            return self._traces_deltas[trace_index]
+            return self._data_defaults[trace_index]
         elif child is self.layout:
-            return self._layout_delta
+            return self._layout_defaults
         else:
             raise ValueError('Unrecognized child: %s' % child)
 
-    def _init_child_data(self, child):
+    def _init_child_props(self, child):
         # layout and traces dict are never None
         return
 
@@ -581,11 +581,11 @@ class BaseFigureWidget(widgets.DOMWidget):
         if msg_id == self._last_relayout_msg_id:
             # print('Processing layoutDelta')
             # print('layoutDelta: {deltas}'.format(deltas=delta))
-            delta_transform = self.transform_data(self._layout_delta, delta)
+            delta_transform = self.transform_data(self._layout_defaults, delta)
             # print(f'delta_transform: {delta_transform}')
 
             # No relayout messages in process. Handle removing overlapping properties
-            removed_props = self.remove_overlapping_props(self._layout_data, self._layout_delta)
+            removed_props = self.remove_overlapping_props(self._layout, self._layout_defaults)
             if removed_props:
                 # print(f'Removed_props: {removed_props}')
                 self._py2js_removeLayoutProps = removed_props
@@ -599,24 +599,24 @@ class BaseFigureWidget(widgets.DOMWidget):
 
     @property
     def layout(self):
-        return self._layout
+        return self._layout_obj
 
     @layout.setter
     def layout(self, new_layout):
         # Validate layout
         new_layout = self._layout_validator.validate_coerce(new_layout)
-        new_layout_data = deepcopy(new_layout._data)
+        new_layout_data = deepcopy(new_layout._props)
 
         # Unparent current layout
-        if self._layout:
-            old_layout_data = deepcopy(self._layout._data)
-            self._layout._orphan_data.update(old_layout_data)
-            self._layout._parent = None
+        if self._layout_obj:
+            old_layout_data = deepcopy(self._layout_obj._props)
+            self._layout_obj._orphan_props.update(old_layout_data)
+            self._layout_obj._parent = None
 
         # Parent new layout
-        self._layout_data = new_layout_data
+        self._layout = new_layout_data
         new_layout._parent = self
-        self._layout = new_layout
+        self._layout_obj = new_layout
 
         # Notify JS side
         self._send_relayout_msg(new_layout_data)
@@ -676,7 +676,7 @@ class BaseFigureWidget(widgets.DOMWidget):
             # kstr may have periods. e.g. foo.bar
             key_path = self._str_to_dict_path(raw_key)
 
-            val_parent = self._layout_data
+            val_parent = self._layout
             for kp, key_path_el in enumerate(key_path[:-1]):
                 if key_path_el not in val_parent:
 
@@ -792,7 +792,7 @@ class BaseFigureWidget(widgets.DOMWidget):
 
         # Process trace indexes
         if trace_indexes is None:
-            trace_indexes = list(range(len(self.traces)))
+            trace_indexes = list(range(len(self.data)))
 
         if not isinstance(trace_indexes, (list, tuple)):
             trace_indexes = [trace_indexes]
@@ -871,9 +871,9 @@ class BaseFigureWidget(widgets.DOMWidget):
         trace_points = {trace_ind: {'point_inds': [],
                                     'xs': [],
                                     'ys': [],
-                                    'trace_name': self._traces[trace_ind].name,
+                                    'trace_name': self._data_objs[trace_ind].name,
                                     'trace_index': trace_ind}
-                        for trace_ind in range(len(self._traces))}
+                        for trace_ind in range(len(self._data_objs))}
 
         for x, y, point_ind, trace_ind in zip(points_data['xs'],
                                                   points_data['ys'],
@@ -891,7 +891,7 @@ class BaseFigureWidget(widgets.DOMWidget):
         # ------------------
         for trace_ind, trace_points_data in trace_points.items():
             points = Points(**trace_points_data)
-            trace = self.traces[trace_ind]  # type: BaseTraceType
+            trace = self.data[trace_ind]  # type: BaseTraceType
 
             if event_type == 'plotly_click':
                 trace._dispatch_on_click(points, state)
@@ -1096,10 +1096,8 @@ class BaseFigureWidget(widgets.DOMWidget):
     # Exports
     # -------
     def to_dict(self):
-        data = deepcopy(self._traces_data)
-        # BaseFigureWidget.transform_data(data, deepcopy(self._traces_deltas), should_remove=False)
-        layout = deepcopy(self._layout_data)
-        # BaseFigureWidget.transform_data(layout, deepcopy(self._layout_delta), should_remove=False)
+        data = deepcopy(self._data)
+        layout = deepcopy(self._layout)
         return {'data': data, 'layout': layout}
 
     def save_html(self, filename, auto_open=False, responsive=False):
@@ -1385,22 +1383,22 @@ class BasePlotlyType:
     _validators = None
 
     # Defaults to help mocking
-    def __init__(self, prop_name, **kwargs):
+    def __init__(self, name, **kwargs):
 
-        self._prop_name = prop_name
+        self._name = name
         self._raise_on_invalid_property_error(**kwargs)
         self._validators = {}
         self._compound_props = {}
-        self._orphan_data = {}  # properties dict for use while object has no parent
+        self._orphan_props = {}  # properties dict for use while object has no parent
         self._parent = None
         self._change_callbacks = {}  # type: typ.Dict[typ.Tuple, typ.Callable]
 
     @property
-    def prop_name(self):
-        return self._prop_name
+    def name(self):
+        return self._name
 
     @property
-    def _prop_parent(self) -> str:
+    def _parent_path(self) -> str:
         raise NotImplementedError
 
     @property
@@ -1425,10 +1423,10 @@ class BasePlotlyType:
                 prop_str = 'properties'
                 invalid_str = repr(invalid_props)
 
-            if self._prop_parent:
-                full_prop_name = self._prop_parent + '.' + self.prop_name
+            if self._parent_path:
+                full_prop_name = self._parent_path + '.' + self.name
             else:
-                full_prop_name = self.prop_name
+                full_prop_name = self.name
 
             raise ValueError("Invalid {prop_str} specified for {full_prop_name}: {invalid_str}\n\n"
                              "    Valid properties:\n"
@@ -1439,76 +1437,79 @@ class BasePlotlyType:
                                      prop_descriptions=self._prop_descriptions))
 
     @property
-    def _data(self):
+    def _props(self):
         if self.parent is None:
             # Use orphan data
-            return self._orphan_data
+            return self._orphan_props
         else:
             # Get data from parent's dict
-            return self.parent._get_child_data(self)
+            return self.parent._get_child_props(self)
 
-    def _init_data(self):
+    def _init_props(self):
         # Ensure that _data is initialized.
-        if self._data is not None:
+        if self._props is not None:
             pass
         else:
-            self._parent._init_child_data(self)
+            self._parent._init_child_props(self)
 
-    def _init_child_data(self, child):
-        self.parent._init_child_data(self)
-        self_data = self.parent._get_child_data(self)
+    def _init_child_props(self, child):
+        self.parent._init_child_props(self)
+        self_props = self.parent._get_child_props(self)
 
-        child_or_children = self._compound_props[child.prop_name]
+        child_or_children = self._compound_props[child.name]
         if child is child_or_children:
-            if child.prop_name not in self_data:
-                self_data[child.prop_name] = {}
+            if child.name not in self_props:
+                self_props[child.name] = {}
         elif isinstance(child_or_children, (list, tuple)):
             child_ind = child_or_children.index(child)
-            if child.prop_name not in self_data:
+            if child.name not in self_props:
                 # Initialize list
-                self_data[child.prop_name] = []
+                self_props[child.name] = []
 
             # Make sure list is long enough for child
-            child_list = self_data[child.prop_name]
+            child_list = self_props[child.name]
             while(len(child_list) <= child_ind):
                 child_list.append({})
 
-    def _get_child_data(self, child):
-        self_data = self.parent._get_child_data(self)
-        if self_data is None:
+    def _get_child_props(self, child):
+        self_props = self.parent._get_child_props(self)
+        if self_props is None:
             return None
         else:
-            child_or_children = self._compound_props[child.prop_name]
+            child_or_children = self._compound_props[child.name]
             if child is child_or_children:
-                return self_data.get(child.prop_name, None)
+                return self_props.get(child.name, None)
             elif isinstance(child_or_children, (list, tuple)):
                 child_ind = child_or_children.index(child)
-                children_data = self_data.get(child.prop_name, None)
-                return children_data[child_ind] \
-                    if children_data is not None and len(children_data) > child_ind \
+                children_props = self_props.get(child.name, None)
+                return children_props[child_ind] \
+                    if children_props is not None and len(children_props) > child_ind \
                     else None
             else:
                 ValueError('Unexpected child: %s' % child_or_children)
 
     @property
-    def _delta(self):
+    def _prop_defaults(self):
         if self.parent is None:
             return None
         else:
-            return self.parent._get_child_delta(self)
+            return self.parent._get_child_prop_defaults(self)
 
-    def _get_child_delta(self, child):
-        self_delta = self.parent._get_child_delta(self)
-        if self_delta is None:
+    def _get_child_prop_defaults(self, child):
+        if self.parent is None:
+            return None
+
+        self_prop_defaults = self.parent._get_child_prop_defaults(self)
+        if self_prop_defaults is None:
             return None
         else:
-            child_or_children = self._compound_props[child.prop_name]
+            child_or_children = self._compound_props[child.name]
             if child is child_or_children:
-                return self_delta.get(child.prop_name, None)
+                return self_prop_defaults.get(child.name, None)
             elif isinstance(child_or_children, (list, tuple)):
                 child_ind = child_or_children.index(child)
-                children_data = self_delta.get(child.prop_name, None)
-                return children_data[child_ind] if children_data is not None else None
+                children_props = self_prop_defaults.get(child.name, None)
+                return children_props[child_ind] if children_props is not None else None
             else:
                 ValueError('Unexpected child: %s' % child_or_children)
 
@@ -1529,10 +1530,10 @@ class BasePlotlyType:
 
             if prop in self._compound_props:
                 return self._compound_props[prop]
-            elif self._data is not None and prop in self._data:
-                return self._data[prop]
-            elif self._delta is not None:
-                return self._delta.get(prop, None)
+            elif self._props is not None and prop in self._props:
+                return self._props[prop]
+            elif self._prop_defaults is not None:
+                return self._prop_defaults.get(prop, None)
             else:
                 return None
 
@@ -1574,15 +1575,15 @@ class BasePlotlyType:
 
         if val is None:
             # Check if we should send null update
-            if self._data and prop in self._data:
+            if self._props and prop in self._props:
                 if not self._in_batch_mode:
-                    self._data.pop(prop)
+                    self._props.pop(prop)
                 self._send_update(prop, val)
         else:
-            self._init_data()
-            if prop not in self._data or not BasePlotlyType._vals_equal(self._data[prop], val):
+            self._init_props()
+            if prop not in self._props or not BasePlotlyType._vals_equal(self._props[prop], val):
                 if not self._in_batch_mode:
-                    self._data[prop] = val
+                    self._props[prop] = val
                 self._send_update(prop, val)
 
     def _set_compound_prop(self, prop, val):
@@ -1597,23 +1598,23 @@ class BasePlotlyType:
         # Grab deep copies of current and new states
         curr_val = self._compound_props.get(prop, None)
         if curr_val is not None:
-            curr_dict_val = deepcopy(curr_val._data)
+            curr_dict_val = deepcopy(curr_val._props)
         else:
             curr_dict_val = None
 
         if val is not None:
-            new_dict_val = deepcopy(val._data)
+            new_dict_val = deepcopy(val._props)
         else:
             new_dict_val = None
 
         # Update data dict
         if not self._in_batch_mode:
             if not new_dict_val:
-                if prop in self._data:
-                    self._data.pop(prop)
+                if prop in self._props:
+                    self._props.pop(prop)
             else:
-                self._init_data()
-                self._data[prop] = new_dict_val
+                self._init_props()
+                self._props[prop] = new_dict_val
 
         # Send update if there was a change in value
         if not BasePlotlyType._vals_equal(curr_dict_val, new_dict_val):
@@ -1621,12 +1622,12 @@ class BasePlotlyType:
 
         # Reparent new value and clear orphan data
         val._parent = self
-        val._orphan_data.clear()
+        val._orphan_props.clear()
 
         # Reparent old value and update orphan data
         if curr_val is not None and curr_val is not val:
             if curr_dict_val is not None:
-                curr_val._orphan_data.update(curr_dict_val)
+                curr_val._orphan_props.update(curr_dict_val)
             curr_val._parent = None
 
         self._compound_props[prop] = val
@@ -1644,23 +1645,23 @@ class BasePlotlyType:
         # Update data dict
         curr_val = self._compound_props.get(prop, None)
         if curr_val is not None:
-            curr_dict_vals = [deepcopy(cv._data) for cv in curr_val]
+            curr_dict_vals = [deepcopy(cv._props) for cv in curr_val]
         else:
             curr_dict_vals = None
 
         if val is not None:
-            new_dict_vals = [deepcopy(nv._data) for nv in val]
+            new_dict_vals = [deepcopy(nv._props) for nv in val]
         else:
             new_dict_vals = None
 
         # Update data dict
         if not self._in_batch_mode:
             if not new_dict_vals:
-                if prop in self._data:
-                    self._data.pop(prop)
+                if prop in self._props:
+                    self._props.pop(prop)
             else:
-                self._init_data()
-                self._data[prop] = new_dict_vals
+                self._init_props()
+                self._props[prop] = new_dict_vals
 
         # Send update if there was a change in value
         if not BasePlotlyType._vals_equal(curr_dict_vals, new_dict_vals):
@@ -1669,14 +1670,14 @@ class BasePlotlyType:
         # Reparent new values and clear orphan data
         if val is not None:
             for v in val:
-                v._orphan_data.clear()
+                v._orphan_props.clear()
                 v._parent = self
 
         # Reparent
         if curr_val is not None:
             for cv, cv_dict in zip(curr_val, curr_dict_vals):
                 if cv_dict is not None:
-                    cv._orphan_data.update(cv_dict)
+                    cv._orphan_props.update(cv_dict)
                 cv._parent = None
         self._compound_props[prop] = val
         return val
@@ -1685,15 +1686,15 @@ class BasePlotlyType:
         raise NotImplementedError()
 
     def _update_child(self, child, prop, val):
-        child_prop_val = getattr(self, child.prop_name)
+        child_prop_val = getattr(self, child.name)
         if isinstance(child_prop_val, (list, tuple)):
             child_ind = child_prop_val.index(child)
             obj_path = '{child_name}.{child_ind}.{prop}'.format(
-                child_name=child.prop_name,
+                child_name=child.name,
                 child_ind=child_ind,
                 prop=prop)
         else:
-            obj_path = '{child_name}.{prop}'.format(child_name=child.prop_name, prop=prop)
+            obj_path = '{child_name}.{prop}'.format(child_name=child.name, prop=prop)
 
         self._send_update(obj_path, val)
 
@@ -1749,8 +1750,8 @@ class BasePlotlyType:
 class BaseLayoutHierarchyType(BasePlotlyType):
 
     # _send_relayout analogous to _send_restyle above
-    def __init__(self, prop_name, **kwargs):
-        super().__init__(prop_name, **kwargs)
+    def __init__(self, name, **kwargs):
+        super().__init__(name, **kwargs)
 
     def _send_update(self, prop, val):
         if self.parent:
@@ -1767,11 +1768,11 @@ class BaseLayoutType(BaseLayoutHierarchyType):
 
     _subplotid_prop_re = re.compile('(' + '|'.join(_subplotid_prop_names) + ')(\d+)')
 
-    def __init__(self, prop_name, **kwargs):
+    def __init__(self, name, **kwargs):
         # Compute invalid kwargs. Pass to parent for error message
         invalid_kwargs = {k: v for k, v in kwargs.items()
                           if not self._subplotid_prop_re.fullmatch(k)}
-        super().__init__(prop_name, **invalid_kwargs)
+        super().__init__(name, **invalid_kwargs)
         self._subplotid_props = {}
         for prop, value in kwargs.items():
             self._set_subplotid_prop(prop, value)
@@ -1818,8 +1819,8 @@ class BaseLayoutType(BaseLayoutHierarchyType):
 
 class BaseTraceHierarchyType(BasePlotlyType):
 
-    def __init__(self, prop_name, **kwargs):
-        super().__init__(prop_name, **kwargs)
+    def __init__(self, name, **kwargs):
+        super().__init__(name, **kwargs)
 
     def _send_update(self, prop, val):
         if self.parent:
@@ -1827,8 +1828,8 @@ class BaseTraceHierarchyType(BasePlotlyType):
 
 
 class BaseTraceType(BaseTraceHierarchyType):
-    def __init__(self, prop_name, **kwargs):
-        super().__init__(prop_name, **kwargs)
+    def __init__(self, name, **kwargs):
+        super().__init__(name, **kwargs)
 
         self._hover_callbacks = []
         self._unhover_callbacks = []

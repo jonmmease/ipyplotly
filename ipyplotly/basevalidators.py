@@ -1130,7 +1130,7 @@ class CompoundValidator(BaseValidator):
 
         elif isinstance(v, self.data_class):
             # Copy object
-            v = self.data_class(**v._data)
+            v = self.data_class(**v._props)
         else:
             self.raise_invalid_val(v)
 

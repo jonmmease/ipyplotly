@@ -136,7 +136,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
     # property parent name
     # --------------------
     @property
-    def _prop_parent(self) -> str:
+    def _parent_path(self) -> str:
         return '{compound_node.parent_dir_str}'
 
     # Self properties description
@@ -186,7 +186,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         # ------------------""")
             for literal_node in literal_nodes:
                 buffer.write(f"""
-        self._data['{literal_node.name_property}'] = '{literal_node.node_data}'""")
+        self._props['{literal_node.name_property}'] = '{literal_node.node_data}'""")
 
     return buffer.getvalue()
 
