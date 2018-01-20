@@ -577,7 +577,9 @@ var FigureView = widgets.DOMWidgetView.extend({
             that.el.on('plotly_afterplot', function(update) {that.handle_plotly_afterplot(update)});
         });
     },
-
+    destroy: function() {
+        Plotly.purge(this.el);
+    },
     getFullData: function () {
         // Merge so that we use .data properties if available.
         // e.g. colorscales can be stored by name in this.el.data (Viridis) but by array in el._fullData. We want
