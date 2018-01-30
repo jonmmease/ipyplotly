@@ -540,7 +540,7 @@ var FigureView = widgets.DOMWidgetView.extend({
         var initial_traces = JSON.parse(JSON.stringify(this.model.get('_data')));
         var initial_layout = JSON.parse(JSON.stringify(this.model.get('_layout')));
 
-        Plotly.plot(this.el, initial_traces, initial_layout).then(function () {
+        Plotly.newPlot(this.el, initial_traces, initial_layout).then(function () {
 
             // Update layout
             var relayoutDelta = that.create_delta_object(that.model.get('_layout'), that.getFullLayout());
