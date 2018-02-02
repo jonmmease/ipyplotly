@@ -128,7 +128,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
     # {'-' * len(literal_node.name_property)}
     @property
     def {literal_node.name_property}(self) -> {prop_type}:
-        return self._data['{literal_node.name_property}']\n""")
+        return self._props['{literal_node.name_property}']\n""")
 
         # ### Self properties description ###
         buffer.write(f"""
@@ -247,20 +247,20 @@ def write_datatypes_py(outdir, node: PlotlyNode,
             f.write(formatted_source)
 
 
-def build_figure_py(base_node: TraceNode):
+def build_figure_py(base_node: TraceNode, base_package, base_classname, fig_classname):
     buffer = StringIO()
     trace_nodes = base_node.child_compound_datatypes
 
     # Imports
     # -------
-    buffer.write('from ipyplotly.basedatatypes import BaseFigureWidget\n')
+    buffer.write(f'from ipyplotly.{base_package} import {base_classname}\n')
 
     trace_types_csv = ', '.join([n.name_pascal_case for n in trace_nodes])
     buffer.write(f'from ipyplotly.datatypes.trace import ({trace_types_csv})\n')
 
-    buffer.write("""
+    buffer.write(f"""
 
-class Figure(BaseFigureWidget):\n""")
+class {fig_classname}({base_classname}):\n""")
 
     for trace_node in trace_nodes:
 
@@ -298,14 +298,17 @@ def append_figure_class(outdir, base_node: TraceNode):
     if base_node.node_path:
         raise ValueError('Expected root trace node. Received node with path "%s"' % base_node.dir_str)
 
-    figure_source = build_figure_py(base_node)
-    formatted_source = format_source(figure_source)
+    base_figures = [('basewidget', 'BaseFigureWidget', 'FigureWidget'),
+                    ('basedatatypes', 'BaseFigure', 'Figure')]
 
-    # Append to file
-    # --------------
-    filepath = opath.join(outdir, '__init__.py')
+    for base_package, base_classname, fig_classname in base_figures:
+        figure_source = build_figure_py(base_node, base_package, base_classname, fig_classname)
+        formatted_source = format_source(figure_source)
 
-    with open(filepath, 'a') as f:
-        f.write('\n\n')
-        f.write(formatted_source)
+        # Append to file
+        # --------------
+        filepath = opath.join(outdir, '__init__.py')
 
+        with open(filepath, 'a') as f:
+            f.write('\n\n')
+            f.write(formatted_source)

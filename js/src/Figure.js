@@ -51,7 +51,7 @@ var FigureModel = widgets.DOMWidgetModel.extend({
 
     initialize: function() {
         FigureModel.__super__.initialize.apply(this, arguments);
-        console.log('FigureModel: initialize');
+        console.log(['FigureModel: initialize', this._data, this._layout]);
 
         this.on('change:_py2js_addTraces', this.do_addTraces, this);
         this.on('change:_py2js_deleteTraces', this.do_deleteTraces, this);
@@ -111,7 +111,6 @@ var FigureModel = widgets.DOMWidgetModel.extend({
         // add trace to plot
         console.log('Figure Model: do_addTraces');
         var data = this.get('_py2js_addTraces');
-        console.log('do_addTraces');
 
         if (data !== null) {
             console.log(data);
@@ -838,20 +837,20 @@ var FigureView = widgets.DOMWidgetView.extend({
     },
 
     handle_plotly_doubleclick: function (data) {
-        console.log("plotly_doubleclick");
-        console.log(data);
+        // console.log("plotly_doubleclick");
+        // console.log(data);
     },
 
     handle_plotly_afterplot: function (data) {
-        console.log("plotly_afterplot");
-        console.log(data);
+        // console.log("plotly_afterplot");
+        // console.log(data);
     },
 
     do_addTraces: function () {
         // add trace to plot
 
         var data = this.model.get('_py2js_addTraces');
-        console.log('do_addTraces');
+        console.log('Figure View: do_addTraces');
 
         if (data !== null) {
             console.log(data);
