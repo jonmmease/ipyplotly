@@ -17,7 +17,11 @@ def format_source(validator_source):
     return formatted_source
 
 
-custom_validator_datatypes = {'layout.image.source': 'ImageUri'}
+custom_validator_datatypes = {
+    'layout.image.source': 'ipyplotly.basevalidators.ImageUriValidator',
+    'frame.data': 'ipyplotly.validators.DataValidator',
+    'frame.layout': 'ipyplotly.validators.LayoutValidator'
+}
 
 class PlotlyNode:
 
@@ -65,7 +69,7 @@ class PlotlyNode:
         raise NotImplementedError()
 
     @property
-    def name(self) -> str:
+    def plotly_name(self) -> str:
         if len(self.node_path) == 0:
             return self.base_name
         else:
@@ -73,17 +77,17 @@ class PlotlyNode:
 
     @property
     def name_pascal_case(self) -> str:
-        return self.name.title().replace('_', '')
+        return self.plotly_name.title().replace('_', '')
 
     @property
     def name_undercase(self) -> str:
-        if not self.name:
-            # Empty name
-            return self.name
+        if not self.plotly_name:
+            # Empty plotly_name
+            return self.plotly_name
 
         # Lowercase leading char
         # ----------------------
-        name1 = self.name[0].lower() + self.name[1:]
+        name1 = self.plotly_name[0].lower() + self.plotly_name[1:]
 
         # Replace capital chars by underscore-lower
         # -----------------------------------------
@@ -93,7 +97,7 @@ class PlotlyNode:
 
     @property
     def name_property(self) -> str:
-        return self.name + ('s' if self.is_array_element else '')
+        return self.plotly_name + ('s' if self.is_array_element else '')
 
     @property
     def name_validator(self) -> str:
@@ -102,9 +106,9 @@ class PlotlyNode:
     @property
     def name_base_validator(self) -> str:
         if self.dir_str in custom_validator_datatypes:
-            validator_base = f"{custom_validator_datatypes[self.dir_str]}Validator"
+            validator_base = f"{custom_validator_datatypes[self.dir_str]}"
         else:
-            validator_base = f"{self.datatype_pascal_case}Validator"
+            validator_base = f"ipyplotly.basevalidators.{self.datatype_pascal_case}Validator"
 
         return validator_base
 
@@ -127,17 +131,22 @@ class PlotlyNode:
 
     @property
     def validator_instance(self) -> BaseValidator:
-        validators_module = importlib.import_module('ipyplotly.basevalidators')
+
+        module_parts = self.name_base_validator.split('.')
+        module_path = '.'.join(module_parts[:-1])
+        cls_name = module_parts[-1]
+
+        validators_module = importlib.import_module(module_path)
 
         validator_class_list = [cls
-                                for cls_name, cls in inspect.getmembers(validators_module, inspect.isclass)
-                                if cls.__name__ == self.name_base_validator]
+                                for _, cls in inspect.getmembers(validators_module, inspect.isclass)
+                                if cls.__name__ == cls_name]
         if not validator_class_list:
             raise ValueError(f"Unknown base validator '{self.name_base_validator}'")
 
         validator_class = validator_class_list[0]
 
-        args = dict(name=self.name_property, parent_name=self.parent_dir_str)
+        args = dict(plotly_name=self.name_property, parent_name=self.parent_dir_str)
 
         if validator_class == CompoundValidator:
             data_class_str = f"<class ipyplotly.datatypes.{self.parent_dir_str}.{self.name_class}>"
@@ -182,7 +191,7 @@ class PlotlyNode:
 
     @property
     def is_compound(self) -> bool:
-        return isinstance(self.node_data, dict) and not self.is_simple and self.name != 'impliedEdits'
+        return isinstance(self.node_data, dict) and not self.is_simple and self.plotly_name != 'impliedEdits'
 
     @property
     def is_literal(self) -> bool:
@@ -252,9 +261,9 @@ class PlotlyNode:
     @property
     def simple_attrs(self) -> List['PlotlyNode']:
         if not self.is_simple:
-            raise ValueError(f"Cannot get simple attributes trace object '{self.dir_str}'")
+            raise ValueError(f"Cannot get simple attributes of the simple object '{self.dir_str}'")
 
-        return [n for n in self.children if n.name not in ['valType', 'description', 'role']]
+        return [n for n in self.children if n.plotly_name not in ['valType', 'description', 'role']]
 
     @property
     def parent(self) -> 'PlotlyNode':
@@ -268,7 +277,7 @@ class PlotlyNode:
         children: list of TraceNode
         """
         # if self.is_array:
-        #     items_child = [c for c in self.children if c.name == 'items'][0]
+        #     items_child = [c for c in self.children if c.plotly_name == 'items'][0]
         #     return items_child.children
         # else:
         nodes = []
@@ -392,7 +401,7 @@ class LayoutNode(PlotlyNode):
         return ''
 
     @property
-    def name(self) -> str:
+    def plotly_name(self) -> str:
         if len(self.node_path) == 0:
             return self.base_name
         elif len(self.node_path) == 1:
@@ -442,7 +451,7 @@ class TraceLayoutNode(LayoutNode):
         return 'layout'
 
     @property
-    def name(self) -> str:
+    def plotly_name(self) -> str:
         if len(self.node_path) == 0:
             return self.base_name
         else:
@@ -461,5 +470,52 @@ class TraceLayoutNode(LayoutNode):
 
         except KeyError:
             node_data = []
+
+        return node_data
+
+
+class FrameNode(PlotlyNode):
+
+    # Constructor
+    # -----------
+    def __init__(self, plotly_schema, node_path=(), parent=None):
+        super().__init__(plotly_schema, node_path, parent)
+
+    @property
+    def base_datatype_class(self):
+        return 'BaseFrameHierarchyType'
+
+    @property
+    def base_name(self):
+        return ''
+
+    @property
+    def plotly_name(self) -> str:
+        if len(self.node_path) < 2:
+            return self.base_name
+        elif len(self.node_path) == 2:
+            return 'frame'  # override 'frames_entry'
+        else:
+            return self.node_path[-1]
+
+    def tidy_dir_path(self, p):
+        return 'frame' if p == 'frames_entry' else p
+
+    # Description
+    # -----------
+    @property
+    def description(self) -> str:
+        desc = self.node_data.get('description', '')
+        if isinstance(desc, list):
+            desc = ''.join(desc)
+        return desc
+
+    # Raw data
+    # --------
+    @property
+    def node_data(self) -> dict:
+        node_data = self.plotly_schema['frames']
+        for prop_name in self.node_path:
+            node_data = node_data[prop_name]
 
         return node_data

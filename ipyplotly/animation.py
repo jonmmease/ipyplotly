@@ -3,8 +3,8 @@ from ipyplotly.basevalidators import EnumeratedValidator, NumberValidator
 
 class EasingValidator(EnumeratedValidator):
 
-    def __init__(self, prop_name='easing'):
-        super().__init__(name=prop_name,
+    def __init__(self, plotly_name='easing'):
+        super().__init__(plotly_name=plotly_name,
                          parent_name='batch_animate',
                          values=[
                              "linear",
@@ -48,5 +48,5 @@ class EasingValidator(EnumeratedValidator):
 
 class DurationValidator(NumberValidator):
 
-    def __init__(self, prop_name='duration'):
-        super().__init__(name=prop_name, parent_name='batch_animate', min=0)
+    def __init__(self, plotly_name='duration'):
+        super().__init__(plotly_name=plotly_name, parent_name='batch_animate', min=0)

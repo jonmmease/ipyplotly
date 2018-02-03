@@ -72,9 +72,9 @@ def type_str(v):
 # Validators
 # ----------
 class BaseValidator:
-    def __init__(self, name, parent_name):
+    def __init__(self, plotly_name, parent_name):
         self.parent_name = parent_name
-        self.name = name
+        self.plotly_name = plotly_name
 
     def validate_coerce(self, v):
         raise NotImplementedError()
@@ -83,7 +83,7 @@ class BaseValidator:
         """Returns a string that describes the values that are acceptable to the validator.
 
         Should start with:
-            The '{name}' property is a...
+            The '{plotly_name}' property is a...
 
         For consistancy, string should have leading 4-space indent
         """
@@ -92,10 +92,10 @@ class BaseValidator:
     def raise_invalid_val(self, v):
         raise ValueError(
             ("\n"
-             "    Invalid value of type {typ} received for the '{name}' property of {parent_name}\n"
+             "    Invalid value of type {typ} received for the '{plotly_name}' property of {parent_name}\n"
              "        Received value: {v}\n\n"
              "{vald_clr_desc}\n"
-             ).format(name=self.name,
+             ).format(plotly_name=self.plotly_name,
                       parent_name=self.parent_name,
                       typ=type_str(v),
                       v=repr(v),
@@ -105,10 +105,10 @@ class BaseValidator:
         if invalid_els:
             raise ValueError(
                 ("\n"
-                 "    Invalid element(s) received for the '{name}' property of {parent_name}\n"
+                 "    Invalid element(s) received for the '{plotly_name}' property of {parent_name}\n"
                  "        Invalid elements include: {invalid}\n\n"
                  "{vald_clr_desc}\n"
-                 ).format(name=self.name,
+                 ).format(plotly_name=self.plotly_name,
                           parent_name=self.parent_name,
                           invalid=invalid_els[:10],
                           vald_clr_desc=self.description()))
@@ -125,13 +125,13 @@ class DataArrayValidator(BaseValidator):
         },
     """
 
-    def __init__(self, name, parent_name, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
 
     def description(self):
         return ("""\
-    The '{name}' property is an array that may be specified as a tuple, list, or one-dimensional numpy array"""
-                .format(name=self.name))
+    The '{plotly_name}' property is an array that may be specified as a tuple, list, or one-dimensional numpy array"""
+                .format(plotly_name=self.plotly_name))
 
     def validate_coerce(self, v):
 
@@ -159,8 +159,8 @@ class EnumeratedValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, values, array_ok=False, coerce_number=False, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, values, array_ok=False, coerce_number=False, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
 
         # coerce_number is rarely used and not implemented
         self.coerce_number = coerce_number
@@ -189,7 +189,7 @@ class EnumeratedValidator(BaseValidator):
                 enum_vals.append(v)
 
         desc = """\
-    The '{name}' property is an enumeration that may be specified as:""".format(name=self.name)
+    The '{plotly_name}' property is an enumeration that may be specified as:""".format(plotly_name=self.plotly_name)
 
         if enum_vals:
             enum_vals_str = '\n'.join(textwrap.wrap(repr(enum_vals),
@@ -255,13 +255,13 @@ class BooleanValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
 
     def description(self):
         return ("""\
-    The '{name}' property must be specified as a bool (either True, or False)"""
-                .format(name=self.name))
+    The '{plotly_name}' property must be specified as a bool (either True, or False)"""
+                .format(plotly_name=self.plotly_name))
 
     def validate_coerce(self, v):
         if v is None:
@@ -286,8 +286,8 @@ class NumberValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, min=None, max=None, array_ok=False, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, min=None, max=None, array_ok=False, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
 
         # Handle min
         if min is None and max is not None:
@@ -307,7 +307,7 @@ class NumberValidator(BaseValidator):
 
     def description(self):
         desc = """\
-    The '{name}' property is a number and may be specified as:""".format(name=self.name)
+    The '{plotly_name}' property is a number and may be specified as:""".format(plotly_name=self.plotly_name)
 
         if self.min_val is None and self.max_val is None:
             desc = desc + """
@@ -374,8 +374,8 @@ class IntegerValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, min=None, max=None, array_ok=False, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, min=None, max=None, array_ok=False, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
 
         # Handle min
         if min is None and max is not None:
@@ -395,7 +395,7 @@ class IntegerValidator(BaseValidator):
 
     def description(self):
         desc = """\
-    The '{name}' property is a integer and may be specified as:""".format(name=self.name)
+    The '{plotly_name}' property is a integer and may be specified as:""".format(plotly_name=self.plotly_name)
 
         if self.min_val is None and self.max_val is None:
             desc = desc + """
@@ -469,8 +469,8 @@ class StringValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, no_blank=False, strict=False, array_ok=False, values=None, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, no_blank=False, strict=False, array_ok=False, values=None, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
         self.no_blank = no_blank
         self.strict = strict        # Not implemented. We're always strict
         self.array_ok = array_ok
@@ -478,7 +478,7 @@ class StringValidator(BaseValidator):
 
     def description(self):
         desc = """\
-    The '{name}' property is a string and must be specified as:""".format(name=self.name)
+    The '{plotly_name}' property is a string and must be specified as:""".format(plotly_name=self.plotly_name)
 
         if self.no_blank:
             desc = desc + """
@@ -570,8 +570,8 @@ class ColorValidator(BaseValidator):
         "slateblue", "slategray", "slategrey", "snow", "springgreen", "steelblue", "tan", "teal", "thistle", "tomato",
         "turquoise", "violet", "wheat", "white", "whitesmoke", "yellow", "yellowgreen"]
 
-    def __init__(self, name, parent_name, array_ok=False, colorscale_path=None, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, array_ok=False, colorscale_path=None, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
         self.colorscale_path = colorscale_path
         self.array_ok = array_ok
 
@@ -583,14 +583,14 @@ class ColorValidator(BaseValidator):
         named_clrs_str = '\n'.join(textwrap.wrap(', '.join(self.named_colors), width=80, subsequent_indent=' ' * 12))
 
         valid_color_description = """\
-    The '{name}' property is a color and may be specified as:  
+    The '{plotly_name}' property is a color and may be specified as:  
       - A hex string (e.g. '#ff0000')
       - An rgb/rgba string (e.g. 'rgb(255,0,0)')
       - An hsl/hsla string (e.g. 'hsl(0,100%,50%)')
       - An hsv/hsva string (e.g. 'hsv(0,100%,100%)')
       - A named CSS color:
             {clrs}""".format(
-            name=self.name,
+            plotly_name=self.plotly_name,
             clrs=named_clrs_str)
 
         if self.colorscale_path:
@@ -674,13 +674,13 @@ class ColorlistValidator(BaseValidator):
           ]
         }
     """
-    def __init__(self, name, parent_name, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
 
     def description(self):
         return ("""\
-    The '{name}' property is a colorlist that may be specified as a tuple, list, 
-    or one-dimensional numpy array of valid color strings""".format(name=self.name))
+    The '{plotly_name}' property is a colorlist that may be specified as a tuple, list, 
+    or one-dimensional numpy array of valid color strings""".format(plotly_name=self.plotly_name))
 
     def validate_coerce(self, v):
 
@@ -714,19 +714,19 @@ class ColorscaleValidator(BaseValidator):
     named_colorscales = ['Greys', 'YlGnBu', 'Greens', 'YlOrRd', 'Bluered', 'RdBu', 'Reds', 'Blues', 'Picnic',
                          'Rainbow', 'Portland', 'Jet', 'Hot', 'Blackbody', 'Earth', 'Electric', 'Viridis']
 
-    def __init__(self, name, parent_name, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
 
     def description(self):
         desc = """\
-    The '{name}' property is a colorscale and may be specified as:
+    The '{plotly_name}' property is a colorscale and may be specified as:
       - A list of 2-element lists where the first element is the normalized color level value 
         (starting at 0 and ending at 1), and the second item is a valid color string. 
         (e.g. [[0.5, 'red'], [1.0, 'rgb(0, 0, 255)']])
       - One of the following named colorscales:
             ['Greys', 'YlGnBu', 'Greens', 'YlOrRd', 'Bluered', 'RdBu', 'Reds', 'Blues', 'Picnic', 
              'Rainbow', 'Portland', 'Jet', 'Hot', 'Blackbody', 'Earth', 'Electric', 'Viridis']
-        """.format(name=self.name)
+        """.format(plotly_name=self.plotly_name)
 
         return desc
 
@@ -773,14 +773,14 @@ class AngleValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
 
     def description(self):
         desc = """\
-    The '{name}' property is a angle (in degrees) that may be specified as a number between -180 and 180.
+    The '{plotly_name}' property is a angle (in degrees) that may be specified as a number between -180 and 180.
     Numeric values outside this range are converted to the equivalent value (e.g. 270 is converted to -90).
-        """.format(name=self.name)
+        """.format(plotly_name=self.plotly_name)
 
         return desc
 
@@ -807,18 +807,18 @@ class SubplotidValidator(BaseValidator):
             "otherOpts": []
         },
     """
-    def __init__(self, name, parent_name, dflt, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, dflt, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
         self.base = dflt
         self.regex = dflt + "(\d*)"
 
     def description(self):
 
         desc = """\
-    The '{name}' property is an identifier of a particular subplot, of type '{base}', that 
+    The '{plotly_name}' property is an identifier of a particular subplot, of type '{base}', that 
     may be specified as the string '{base}' optionally followed by an integer > 1 
     (e.g. '{base}', '{base}2', '{base}3', etc.)
-        """.format(name=self.name, base=self.base)
+        """.format(plotly_name=self.plotly_name, base=self.base)
         return desc
 
     def validate_coerce(self, v):
@@ -855,8 +855,8 @@ class FlaglistValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, flags, extras=None, array_ok=False, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, flags, extras=None, array_ok=False, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
         self.flags = flags
         self.extras = extras if extras is not None else []
         self.array_ok = array_ok
@@ -866,8 +866,8 @@ class FlaglistValidator(BaseValidator):
     def description(self):
 
         desc = ("""\
-    The '{name}' property is a flaglist and may be specified as a string containing:"""
-                ).format(name=self.name)
+    The '{plotly_name}' property is a flaglist and may be specified as a string containing:"""
+                ).format(plotly_name=self.plotly_name)
 
         # Flags
         desc = desc + ("""
@@ -939,16 +939,16 @@ class AnyValidator(BaseValidator):
             ]
         },
     """
-    def __init__(self, name, parent_name, values=None, array_ok=False, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, values=None, array_ok=False, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
         self.values = values
         self.array_ok = array_ok
 
     def description(self):
 
         desc = """\
-    The '{name}' property accepts values of any type
-        """.format(name=self.name)
+    The '{plotly_name}' property accepts values of any type
+        """.format(plotly_name=self.plotly_name)
         return desc
 
     def validate_coerce(self, v):
@@ -974,13 +974,13 @@ class InfoArrayValidator(BaseValidator):
             ]
         }
     """
-    def __init__(self, name, parent_name, items, free_length=None, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, items, free_length=None, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
         self.items = items
 
         self.item_validators = []
         for i, item in enumerate(self.items):
-            item_validator = InfoArrayValidator.build_validator(item, '{name}[{i}]'.format(name=name, i=i), parent_name)
+            item_validator = InfoArrayValidator.build_validator(item, '{plotly_name}[{i}]'.format(plotly_name=plotly_name, i=i), parent_name)
             self.item_validators.append(item_validator)
 
         self.free_length = free_length
@@ -988,9 +988,9 @@ class InfoArrayValidator(BaseValidator):
     def description(self):
         upto = ' up to' if self.free_length else ''
         desc = """\
-    The '{name}' property is an info array that may be specified as a list or tuple of{upto}
+    The '{plotly_name}' property is an info array that may be specified as a list or tuple of{upto}
     {N} elements such that:
-        """.format(name=self.name, upto=upto, N=len(self.item_validators))
+        """.format(plotly_name=self.plotly_name, upto=upto, N=len(self.item_validators))
 
         for i, item_validator in enumerate(self.item_validators):
             el_desc = ('\n' + ' ' * 12).join([line.strip() for line in item_validator.description().split('\n')])
@@ -1001,7 +1001,7 @@ class InfoArrayValidator(BaseValidator):
         return desc
 
     @staticmethod
-    def build_validator(validator_info, name, parent_name):
+    def build_validator(validator_info, plotly_name, parent_name):
         datatype = validator_info['valType']  # type: str
         validator_classname = datatype.title().replace('_', '') + 'Validator'
         validator_class = eval(validator_classname)
@@ -1009,7 +1009,7 @@ class InfoArrayValidator(BaseValidator):
         kwargs = {k: validator_info[k] for k in validator_info
                   if k not in ['valType', 'description', 'role']}
 
-        return validator_class(name=name, parent_name=parent_name, **kwargs)
+        return validator_class(plotly_name=plotly_name, parent_name=parent_name, **kwargs)
 
     def validate_coerce(self, v):
         if v is None:
@@ -1039,19 +1039,19 @@ class ImageUriValidator(BaseValidator):
     except ModuleNotFoundError:
         pass
 
-    def __init__(self, name, parent_name, **_):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, **_):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
 
     def description(self):
 
         desc = """\
-    The '{name}' property is an image URI that may be specified as:
+    The '{plotly_name}' property is an image URI that may be specified as:
       - A remote image URI string (e.g. 'http://www.somewhere.com/image.png')
       - A local image URI string (e.g. 'file:////somewhere/image.png')
       - A data URI image string (e.g. 'data:image/png;base64,iVBORw0KGgoAAAANSU')
       - A PIL.Image.Image object which will be immediately converted to a data URI image string
             See http://pillow.readthedocs.io/en/latest/reference/Image.html
-        """.format(name=self.name)
+        """.format(plotly_name=self.plotly_name)
         return desc
 
     def validate_coerce(self, v):
@@ -1079,8 +1079,8 @@ class ImageUriValidator(BaseValidator):
 
 
 class CompoundValidator(BaseValidator):
-    def __init__(self, name, parent_name, data_class, data_docs):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, data_class, data_docs):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
         self.data_class = data_class
         self.data_docs = data_docs
 
@@ -1103,7 +1103,7 @@ class CompoundValidator(BaseValidator):
     def description(self):
 
         desc = ("""\
-    The '{name}' property is an instance of {data_class} 
+    The '{plotly_name}' property is an instance of {data_class} 
     that may be specified as:
       - An instance of {data_class}
       - A dict of string/value properties that will be passed to the 
@@ -1111,7 +1111,7 @@ class CompoundValidator(BaseValidator):
       
         Supported dict properties:
             {constructor_params_str}"""
-                ).format(name=self.name,
+                ).format(plotly_name=self.plotly_name,
                          data_class=type_str(self.data_class),
                          constructor_params_str=self.data_docs)
 
@@ -1134,26 +1134,26 @@ class CompoundValidator(BaseValidator):
         else:
             self.raise_invalid_val(v)
 
-        v._prop_name = self.name
+        v._prop_name = self.plotly_name
         return v
 
 
 class CompoundArrayValidator(BaseValidator):
-    def __init__(self, name, parent_name, element_class, element_docs):
-        super().__init__(name=name, parent_name=parent_name)
+    def __init__(self, plotly_name, parent_name, element_class, element_docs):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
         self.data_class = element_class
         self.data_docs = element_docs
 
     def description(self):
 
         desc = ("""\
-    The '{name}' property is a tuple of instances of {data_class} that may be specified as:
+    The '{plotly_name}' property is a tuple of instances of {data_class} that may be specified as:
       - A list or tuple of instances of {data_class}
       - A list or tuple of dicts of string/value properties that will be passed to the {data_class} constructor
 
         Supported dict properties:
             {constructor_params_str}"""
-                ).format(name=self.name,
+                ).format(plotly_name=self.plotly_name,
                          data_class=type_str(self.data_class),
                          constructor_params_str=self.data_docs)
 
@@ -1191,24 +1191,31 @@ class CompoundArrayValidator(BaseValidator):
         return v
 
 
-class BaseTracesValidator(BaseValidator):
-    def __init__(self, class_map):
-        super().__init__(name='traces', parent_name='Figure')
+class BaseDataValidator(BaseValidator):
+    def __init__(self, class_map, plotly_name, parent_name):
+        super().__init__(plotly_name=plotly_name, parent_name=parent_name)
         self.class_map = class_map
 
     def description(self):
 
+        trace_types = str(list(self.class_map.keys()))
+
+        trace_types_wrapped = '\n'.join(textwrap.wrap(trace_types,
+                                                      subsequent_indent=' ' * 21,
+                                                      width=80 - 8))
+
         desc = ("""\
-    The '{name}' property is a tuple of trace instances that may be specified as:
+    The '{plotly_name}' property is a tuple of trace instances that may be specified as:
       - A list or tuple of trace instances 
         (e.g. [Scatter(...), Bar(...)])
       - A list or tuple of dicts of string/value properties where:
         - The 'type' property specifies the trace type
             One of: {trace_types}
+                     
         - All remaining properties are passed to the constructor of the specified trace type
-        
+
         (e.g. [{{'type': 'scatter', ...}}, {{'type': 'bar, ...}}])"""
-                ).format(name=self.name, trace_types=list(self.class_map.keys()))
+                ).format(plotly_name=self.plotly_name, trace_types=trace_types_wrapped)
 
         return desc
 

@@ -15,24 +15,25 @@ from plotly.offline import plot as plotlypy_plot
 from traitlets import Undefined
 
 from ipyplotly import animation
-from ipyplotly.basevalidators import CompoundValidator, CompoundArrayValidator
+from ipyplotly.basevalidators import CompoundValidator, CompoundArrayValidator, BaseDataValidator
 from ipyplotly.callbacks import Points, BoxSelector, LassoSelector, InputState
-from ipyplotly.validators.layout import XaxisValidator, YaxisValidator, GeoValidator, TernaryValidator, SceneValidator
+from ipyplotly.validators.layout import (XaxisValidator, YaxisValidator, GeoValidator,
+                                         TernaryValidator, SceneValidator)
 
 
 class BaseFigure:
 
     # Constructor
     # -----------
-    def __init__(self, data=None, layout_plotly=None):
+    def __init__(self, data=None, layout_plotly=None, frames=None):
         super().__init__()
 
         layout = layout_plotly
 
         # Traces
         # ------
-        from ipyplotly.validators import TracesValidator
-        self._data_validator = TracesValidator()
+        from ipyplotly.validators import DataValidator
+        self._data_validator = DataValidator()
 
         if data is None:
             self._data_objs = ()  # type: typ.Tuple[BaseTraceType]
@@ -64,6 +65,16 @@ class BaseFigure:
         self._layout = deepcopy(self._layout_obj._props)
         self._layout_obj._parent = self
         self._layout_defaults = {}
+
+        # Frames
+        # ------
+        from ipyplotly.validators import FramesValidator
+        self._frames_validator = FramesValidator()
+
+        if frames:
+            self._frame_objs = self._frames_validator.validate_coerce(frames)
+        else:
+            self._frame_objs = ()
 
         # Message States
         # --------------
@@ -123,6 +134,9 @@ class BaseFigure:
     def data(self, new_data):
 
         # Validate new_data
+        new_data = self._data_validator.validate_coerce(new_data)
+
+
         orig_uids = [_trace['uid'] for _trace in self._data]
         new_uids = [trace.uid for trace in new_data]
 
@@ -625,6 +639,21 @@ class BaseFigure:
             changed_paths = p['changed_paths']
             obj._dispatch_change_callbacks(changed_paths)
 
+
+    # Frames
+    # ------
+    @property
+    def frames(self):
+        return self._frame_objs
+
+    @frames.setter
+    def frames(self, new_frames):
+        # Note: Frames are not supported by the FigureWidget subclass so we only validate coerce the frames
+        # We don't emit any events of frame change and we don't reparent the frames
+
+        # Validate frames
+        self._frame_objs = self._frames_validator.validate_coerce(new_frames)
+
     # Update
     # ------
     def update(self, style=None, layout=None, trace_indexes=None):
@@ -665,7 +694,6 @@ class BaseFigure:
         # print(style, trace_indexes, restyle_msg)
         # pprint(self._traces_data)
         return restyle_msg, relayout_msg, trace_indexes
-
 
     def _send_update_msg(self, style, layout, trace_indexes=None):
         if not isinstance(trace_indexes, (list, tuple)):
@@ -894,9 +922,20 @@ class BaseFigure:
     # Exports
     # -------
     def to_dict(self):
+
+        # Handle data
         data = deepcopy([BaseFigure._remove_underscore_keys(trace) for trace in self._data])
+
+        # Handle layout
         layout = deepcopy(BaseFigure._remove_underscore_keys(self._layout))
-        return {'data': data, 'layout': layout}
+
+        # Handle frames
+        res = {'data': data, 'layout': layout}
+        frames = deepcopy([BaseFigure._remove_underscore_keys(frame._props) for frame in self._frame_objs])
+        if frames:
+            res['frames'] = frames
+
+        return res
 
     def save_html(self, filename, auto_open=False, responsive=False):
         data = self.to_dict()
@@ -1175,9 +1214,9 @@ class BasePlotlyType:
     _validators = None
 
     # Defaults to help mocking
-    def __init__(self, name, **kwargs):
+    def __init__(self, plotly_name, **kwargs):
 
-        self._name = name
+        self._plotly_name = plotly_name
         self._raise_on_invalid_property_error(**kwargs)
         self._validators = {}
         self._compound_props = {}
@@ -1186,8 +1225,8 @@ class BasePlotlyType:
         self._change_callbacks = {}  # type: typ.Dict[typ.Tuple, typ.Callable]
 
     @property
-    def name(self):
-        return self._name
+    def plotly_name(self):
+        return self._plotly_name
 
     @property
     def _parent_path(self) -> str:
@@ -1216,9 +1255,9 @@ class BasePlotlyType:
                 invalid_str = repr(invalid_props)
 
             if self._parent_path:
-                full_prop_name = self._parent_path + '.' + self.name
+                full_prop_name = self._parent_path + '.' + self.plotly_name
             else:
-                full_prop_name = self.name
+                full_prop_name = self.plotly_name
 
             raise ValueError("Invalid {prop_str} specified for {full_prop_name}: {invalid_str}\n\n"
                              "    Valid properties:\n"
@@ -1245,35 +1284,43 @@ class BasePlotlyType:
             self._parent._init_child_props(self)
 
     def _init_child_props(self, child):
-        self.parent._init_child_props(self)
-        self_props = self.parent._get_child_props(self)
+        if self.parent:
+            self.parent._init_child_props(self)
+            self_props = self.parent._get_child_props(self)
+        else:
+            self_props = self._orphan_props
 
-        child_or_children = self._compound_props[child.name]
+        child_or_children = self._compound_props[child.plotly_name]
         if child is child_or_children:
-            if child.name not in self_props:
-                self_props[child.name] = {}
+            if child.plotly_name not in self_props:
+                self_props[child.plotly_name] = {}
         elif isinstance(child_or_children, (list, tuple)):
             child_ind = child_or_children.index(child)
-            if child.name not in self_props:
+            if child.plotly_name not in self_props:
                 # Initialize list
-                self_props[child.name] = []
+                self_props[child.plotly_name] = []
 
             # Make sure list is long enough for child
-            child_list = self_props[child.name]
+            child_list = self_props[child.plotly_name]
             while(len(child_list) <= child_ind):
                 child_list.append({})
 
     def _get_child_props(self, child):
-        self_props = self.parent._get_child_props(self)
+
+        if self.parent:
+            self_props = self.parent._get_child_props(self)
+        else:
+            self_props = self._orphan_props
+
         if self_props is None:
             return None
         else:
-            child_or_children = self._compound_props[child.name]
+            child_or_children = self._compound_props[child.plotly_name]
             if child is child_or_children:
-                return self_props.get(child.name, None)
+                return self_props.get(child.plotly_name, None)
             elif isinstance(child_or_children, (list, tuple)):
                 child_ind = child_or_children.index(child)
-                children_props = self_props.get(child.name, None)
+                children_props = self_props.get(child.plotly_name, None)
                 return children_props[child_ind] \
                     if children_props is not None and len(children_props) > child_ind \
                     else None
@@ -1295,12 +1342,12 @@ class BasePlotlyType:
         if self_prop_defaults is None:
             return None
         else:
-            child_or_children = self._compound_props[child.name]
+            child_or_children = self._compound_props[child.plotly_name]
             if child is child_or_children:
-                return self_prop_defaults.get(child.name, None)
+                return self_prop_defaults.get(child.plotly_name, None)
             elif isinstance(child_or_children, (list, tuple)):
                 child_ind = child_or_children.index(child)
-                children_props = self_prop_defaults.get(child.name, None)
+                children_props = self_prop_defaults.get(child.plotly_name, None)
                 return children_props[child_ind] if children_props is not None else None
             else:
                 ValueError('Unexpected child: %s' % child_or_children)
@@ -1340,7 +1387,7 @@ class BasePlotlyType:
 
         if isinstance(validator, CompoundValidator):
             self._set_compound_prop(key, value)
-        elif isinstance(validator, CompoundArrayValidator):
+        elif isinstance(validator, (CompoundArrayValidator, BaseDataValidator)):
             self._set_array_prop(key, value)
         else:
             # Simple property
@@ -1478,15 +1525,15 @@ class BasePlotlyType:
         raise NotImplementedError()
 
     def _update_child(self, child, prop, val):
-        child_prop_val = getattr(self, child.name)
+        child_prop_val = getattr(self, child.plotly_name)
         if isinstance(child_prop_val, (list, tuple)):
             child_ind = child_prop_val.index(child)
             obj_path = '{child_name}.{child_ind}.{prop}'.format(
-                child_name=child.name,
+                child_name=child.plotly_name,
                 child_ind=child_ind,
                 prop=prop)
         else:
-            obj_path = '{child_name}.{prop}'.format(child_name=child.name, prop=prop)
+            obj_path = '{child_name}.{prop}'.format(child_name=child.plotly_name, prop=prop)
 
         self._send_update(obj_path, val)
 
@@ -1542,8 +1589,8 @@ class BasePlotlyType:
 class BaseLayoutHierarchyType(BasePlotlyType):
 
     # _send_relayout analogous to _send_restyle above
-    def __init__(self, name, **kwargs):
-        super().__init__(name, **kwargs)
+    def __init__(self, plotly_name, **kwargs):
+        super().__init__(plotly_name, **kwargs)
 
     def _send_update(self, prop, val):
         if self.parent:
@@ -1560,11 +1607,11 @@ class BaseLayoutType(BaseLayoutHierarchyType):
 
     _subplotid_prop_re = re.compile('(' + '|'.join(_subplotid_prop_names) + ')(\d+)')
 
-    def __init__(self, name, **kwargs):
+    def __init__(self, plotly_name, **kwargs):
         # Compute invalid kwargs. Pass to parent for error message
         invalid_kwargs = {k: v for k, v in kwargs.items()
                           if not self._subplotid_prop_re.fullmatch(k)}
-        super().__init__(name, **invalid_kwargs)
+        super().__init__(plotly_name, **invalid_kwargs)
         self._subplotid_props = {}
         for prop, value in kwargs.items():
             self._set_subplotid_prop(prop, value)
@@ -1611,8 +1658,8 @@ class BaseLayoutType(BaseLayoutHierarchyType):
 
 class BaseTraceHierarchyType(BasePlotlyType):
 
-    def __init__(self, name, **kwargs):
-        super().__init__(name, **kwargs)
+    def __init__(self, plotly_name, **kwargs):
+        super().__init__(plotly_name, **kwargs)
 
     def _send_update(self, prop, val):
         if self.parent:
@@ -1620,8 +1667,8 @@ class BaseTraceHierarchyType(BasePlotlyType):
 
 
 class BaseTraceType(BaseTraceHierarchyType):
-    def __init__(self, name, **kwargs):
-        super().__init__(name, **kwargs)
+    def __init__(self, plotly_name, **kwargs):
+        super().__init__(plotly_name, **kwargs)
 
         self._hover_callbacks = []
         self._unhover_callbacks = []
@@ -1710,3 +1757,14 @@ class BaseTraceType(BaseTraceHierarchyType):
     def _dispatch_on_selected(self, points: Points, selector: typ.Union[BoxSelector, LassoSelector]):
         for callback in self._select_callbacks:
             callback(self, points, selector)
+
+
+class BaseFrameHierarchyType(BasePlotlyType):
+
+    def __init__(self, plotly_name, **kwargs):
+        super().__init__(plotly_name, **kwargs)
+
+    def _send_update(self, prop, val):
+        # Frames are not supported by FrameWidget and updates are not propagated to parents
+        pass
+

@@ -6,15 +6,12 @@ from typing import Dict
 
 from codegen.utils import format_source, PlotlyNode, TraceNode
 
-custom_validator_datatypes = {'layout.image.source': 'ImageUri'}
-
-
 def build_validators_py(parent_node: PlotlyNode,
                         extra_nodes: Dict[str, 'PlotlyNode'] = {}):
 
     extra_subtype_nodes = [node for node_name, node in
                            extra_nodes.items() if
-                           node_name.startswith(parent_node.dir_str)]
+                           parent_node.dir_str and node_name.startswith(parent_node.dir_str)]
 
     datatype_nodes = parent_node.child_datatypes + extra_subtype_nodes
 
@@ -25,7 +22,14 @@ def build_validators_py(parent_node: PlotlyNode,
 
     # Imports
     # -------
-    buffer.write('import ipyplotly.basevalidators as bv\n')
+    # Compute needed imports
+    import_strs = set()
+    for datatype_node in datatype_nodes:
+        module_str = '.'.join(datatype_node.name_base_validator.split('.')[:-1])
+        import_strs.add(module_str)
+
+    for import_str in import_strs:
+        buffer.write(f'import {import_str}\n')
 
     # Check for colorscale node
     # -------------------------
@@ -39,15 +43,11 @@ def build_validators_py(parent_node: PlotlyNode,
     # -----------------------
     for datatype_node in datatype_nodes:
 
-        # if datatype_node.dir_str in custom_validator_datatypes:
-        #     validator_base = f"bv.{custom_validator_datatypes[datatype_node.dir_str]}Validator"
-        # else:
-        #     validator_base = f"bv.{datatype_node.datatype_pascal_case}Validator"
-
+        parent_dir_str = datatype_node.parent_dir_str if datatype_node.parent_dir_str else 'figure'
         buffer.write(f"""
         
-class {datatype_node.name_validator}(bv.{datatype_node.name_base_validator}):
-    def __init__(self, prop_name='{datatype_node.name_property}'):""")
+class {datatype_node.name_validator}({datatype_node.name_base_validator}):
+    def __init__(self, plotly_name='{datatype_node.name_property}', parent_name='{parent_dir_str}'):""")
 
         # Add import
         if datatype_node.is_compound:
@@ -55,8 +55,8 @@ class {datatype_node.name_validator}(bv.{datatype_node.name_base_validator}):
         from ipyplotly.datatypes{parent_node.pkg_str} import {datatype_node.name_pascal_case}""")
 
         buffer.write(f"""
-        super().__init__(name=prop_name,
-                         parent_name='{datatype_node.parent_dir_str}'""")
+        super().__init__(plotly_name=plotly_name,
+                         parent_name=parent_name""")
 
         if datatype_node.is_array_element:
             buffer.write(f""",
@@ -76,7 +76,7 @@ class {datatype_node.name_validator}(bv.{datatype_node.name_base_validator}):
                 excluded_props.remove('dflt')
 
             attr_nodes = [n for n in datatype_node.simple_attrs
-                          if n.name not in excluded_props]
+                          if n.plotly_name not in excluded_props]
 
             attr_dict = {node.name_undercase: repr(node.node_data) for node in attr_nodes}
 
@@ -110,15 +110,13 @@ def write_validator_py(outdir,
         # Write file
         # ----------
         filedir = opath.join(outdir, 'validators', *node.dir_path)
-
-        # ### Create output directory
-        if opath.exists(filedir):
-            shutil.rmtree(filedir)
-        os.makedirs(filedir)
-
-        filepath = opath.join(filedir, '__init__.py')
         os.makedirs(filedir, exist_ok=True)
-        with open(filepath, 'wt') as f:
+        filepath = opath.join(filedir, '__init__.py')
+
+        mode = 'at' if os.path.exists(filepath) else 'wt'
+        with open(filepath, mode) as f:
+            if mode == 'at':
+                f.write("\n\n")
             f.write(formatted_source)
 
 
@@ -129,9 +127,9 @@ def build_traces_validator_py(base_node: TraceNode):
     import_csv = ', '.join([tracetype_node.name_class for tracetype_node in tracetype_nodes])
 
     buffer.write(f"""
-class TracesValidator(bv.BaseTracesValidator):
+class DataValidator(ipyplotly.basevalidators.BaseDataValidator):
 
-    def __init__(self):
+    def __init__(self, plotly_name='data', parent_name='figure'):
         from ipyplotly.datatypes import ({import_csv})
         super().__init__(class_map={{
     """)
@@ -143,7 +141,9 @@ class TracesValidator(bv.BaseTracesValidator):
             '{tracetype_node.name_property}': {tracetype_node.name_class}{sfx}""")
 
     buffer.write("""
-        })""")
+        },
+        plotly_name=plotly_name,
+        parent_name=parent_name)""")
 
     return buffer.getvalue()
 

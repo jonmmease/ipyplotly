@@ -45,11 +45,11 @@ def build_datatypes_py(parent_node: PlotlyNode,
     buffer.write(f'from ipyplotly.basedatatypes import {parent_node.base_datatype_class}\n')
 
     # ### Validators ###
-    validators_csv = ', '.join([f'{n.name} as v_{n.name}' for n in compound_nodes])
+    validators_csv = ', '.join([f'{n.plotly_name} as v_{n.plotly_name}' for n in compound_nodes])
     buffer.write(f'from ipyplotly.validators{parent_node.pkg_str} import ({validators_csv})\n')
 
     # ### Datatypes ###
-    datatypes_csv = ', '.join([f'{n.name} as d_{n.name}' for n in compound_nodes if n.child_compound_datatypes])
+    datatypes_csv = ', '.join([f'{n.plotly_name} as d_{n.plotly_name}' for n in compound_nodes if n.child_compound_datatypes])
     if datatypes_csv:
         buffer.write(f'from ipyplotly.datatypes{parent_node.pkg_str} import ({datatypes_csv})\n')
 
@@ -58,7 +58,7 @@ def build_datatypes_py(parent_node: PlotlyNode,
     for compound_node in compound_nodes:
 
         # grab literals
-        literal_nodes = [n for n in compound_node.child_literals if n.name in ['type']]
+        literal_nodes = [n for n in compound_node.child_literals if n.plotly_name in ['type']]
 
         # ### Class definition ###
         buffer.write(f"""
@@ -74,9 +74,9 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         subtype_nodes = child_datatype_nodes + extra_subtype_nodes
         for subtype_node in subtype_nodes:
             if subtype_node.is_array_element:
-                prop_type = f'Tuple[d_{compound_node.name}.{subtype_node.name_class}]'
+                prop_type = f'Tuple[d_{compound_node.plotly_name}.{subtype_node.name_class}]'
             elif subtype_node.is_compound:
-                prop_type = f'd_{compound_node.name}.{subtype_node.name_class}'
+                prop_type = f'd_{compound_node.plotly_name}.{subtype_node.name_class}'
             else:
                 prop_type = get_typing_type(subtype_node.datatype)
 
@@ -167,7 +167,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         for subtype_node in subtype_nodes:
 
             buffer.write(f"""
-        self._validators['{subtype_node.name_property}'] = v_{compound_node.name}.{subtype_node.name_validator}()""")
+        self._validators['{subtype_node.name_property}'] = v_{compound_node.plotly_name}.{subtype_node.name_validator}()""")
 
         buffer.write(f"""
         
@@ -178,7 +178,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
         self.{subtype_node.name_property} = {subtype_node.name_property}""")
 
         # ### Literals ###
-        literal_nodes = [n for n in compound_node.child_literals if n.name in ['type']]
+        literal_nodes = [n for n in compound_node.child_literals if n.plotly_name in ['type']]
         if literal_nodes:
             buffer.write(f"""
 
@@ -240,10 +240,13 @@ def write_datatypes_py(outdir, node: PlotlyNode,
         # Write file
         # ----------
         filedir = opath.join(outdir, 'datatypes', *node.dir_path)
+        os.makedirs(filedir, exist_ok=True)
         filepath = opath.join(filedir, '__init__.py')
 
-        os.makedirs(filedir, exist_ok=True)
-        with open(filepath, 'wt') as f:
+        mode = 'at' if os.path.exists(filepath) else 'wt'
+        with open(filepath, mode) as f:
+            if mode == 'at':
+                f.write("\n\n")
             f.write(formatted_source)
 
 
@@ -267,7 +270,7 @@ class {fig_classname}({base_classname}):\n""")
         # Function signature
         # ------------------
         buffer.write(f"""
-    def add_{trace_node.name}(self""")
+    def add_{trace_node.plotly_name}(self""")
 
         add_constructor_params(buffer, trace_node.child_datatypes)
         add_docstring(buffer, trace_node)
