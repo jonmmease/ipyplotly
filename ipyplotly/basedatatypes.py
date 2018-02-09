@@ -113,6 +113,8 @@ class BaseFigure:
             self.data = value
         elif prop == 'layout':
             self.layout = value
+        elif prop == 'frames':
+            self.frames = value
         else:
             raise KeyError(prop)
 
@@ -121,8 +123,13 @@ class BaseFigure:
             return self.data
         elif prop == 'layout':
             return self.layout
+        elif prop == 'frames':
+            return self.frames
         else:
             raise KeyError(prop)
+
+    def __contains__(self, prop):
+        return prop in ('data', 'layout', 'frames')
 
     # Data
     # ----
