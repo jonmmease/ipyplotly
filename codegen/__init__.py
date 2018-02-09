@@ -3,6 +3,8 @@ import os.path as opath
 import os
 import shutil
 
+import time
+
 from codegen.datatypes import build_datatypes_py, write_datatypes_py, append_figure_class
 from codegen.utils import TraceNode, PlotlyNode, LayoutNode, FrameNode
 from codegen.validators import write_validator_py, append_traces_validator_py
@@ -18,6 +20,7 @@ def perform_codegen():
 
     # Compute property paths
     # ----------------------
+    base_traces_node = TraceNode(plotly_schema)
     compound_trace_nodes = PlotlyNode.get_all_compound_datatype_nodes(plotly_schema, TraceNode)
     compound_layout_nodes = PlotlyNode.get_all_compound_datatype_nodes(plotly_schema, LayoutNode)
     compound_frame_nodes = PlotlyNode.get_all_compound_datatype_nodes(plotly_schema, FrameNode)
@@ -52,11 +55,6 @@ def perform_codegen():
     for node in compound_trace_nodes:
         write_datatypes_py(outdir, node)
 
-    # Append figure class to datatypes
-    # --------------------------------
-    base_traces_node = TraceNode(plotly_schema)
-    append_figure_class(datatypes_pkgdir, base_traces_node)
-
     # Append traces validator class
     # -----------------------------
     append_traces_validator_py(validators_pkgdir, base_traces_node)
@@ -70,6 +68,10 @@ def perform_codegen():
     # ### Datatypes ###
     for node in compound_frame_nodes:
         write_datatypes_py(outdir, node)
+
+    # Append figure class to datatypes
+    # --------------------------------
+    append_figure_class(datatypes_pkgdir, base_traces_node)
 
 
 if __name__ == '__main__':

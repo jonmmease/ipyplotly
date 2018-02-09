@@ -118,6 +118,8 @@ def write_validator_py(outdir,
             if mode == 'at':
                 f.write("\n\n")
             f.write(formatted_source)
+            f.flush()
+            os.fsync(f.fileno())
 
 
 def build_traces_validator_py(base_node: TraceNode):
@@ -130,7 +132,7 @@ def build_traces_validator_py(base_node: TraceNode):
 class DataValidator(ipyplotly.basevalidators.BaseDataValidator):
 
     def __init__(self, plotly_name='data', parent_name='figure'):
-        from ipyplotly.datatypes import ({import_csv})
+        from ipyplotly.datatypes.trace import ({import_csv})
         super().__init__(class_map={{
     """)
 
@@ -163,3 +165,5 @@ def append_traces_validator_py(outdir, base_node: TraceNode):
     with open(filepath, 'a') as f:
         f.write('\n\n')
         f.write(formatted_source)
+        f.flush()
+        os.fsync(f.fileno())

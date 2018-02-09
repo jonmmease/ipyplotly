@@ -2,6 +2,7 @@ from io import StringIO
 import os
 import os.path as opath
 import textwrap
+import importlib
 from typing import List, Dict
 
 from codegen.utils import TraceNode, format_source, PlotlyNode
@@ -89,9 +90,7 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
 
             # #### Get validator description ####
             validator = subtype_node.validator_instance
-
-            # Remove leading indent and add extra 4 spaces to subsequent indent
-            validator_description = ('\n' + ' ' * 4).join(validator.description().strip().split('\n'))
+            validator_description = reindent_validator_description(validator, 4)
 
             # #### Combine to form property docstring ####
             if property_description.strip():
@@ -191,6 +190,11 @@ class {compound_node.name_class}({parent_node.base_datatype_class}):\n""")
     return buffer.getvalue()
 
 
+def reindent_validator_description(validator, extra_indent):
+    # Remove leading indent and add extra spaces to subsequent indent
+    return ('\n' + ' ' * extra_indent).join(validator.description().strip().split('\n'))
+
+
 def add_constructor_params(buffer, subtype_nodes, colon=True):
     for i, subtype_node in enumerate(subtype_nodes):
         dflt = None
@@ -248,11 +252,13 @@ def write_datatypes_py(outdir, node: PlotlyNode,
             if mode == 'at':
                 f.write("\n\n")
             f.write(formatted_source)
+            f.flush()
+            os.fsync(f.fileno())
 
 
-def build_figure_py(base_node: TraceNode, base_package, base_classname, fig_classname):
+def build_figure_py(trace_node, base_package, base_classname, fig_classname):
     buffer = StringIO()
-    trace_nodes = base_node.child_compound_datatypes
+    trace_nodes = trace_node.child_compound_datatypes
 
     # Imports
     # -------
@@ -265,6 +271,41 @@ def build_figure_py(base_node: TraceNode, base_package, base_classname, fig_clas
 
 class {fig_classname}({base_classname}):\n""")
 
+    # Reload validators and datatypes modules since we're appending
+    # Classes to them as we go
+    validators_module = importlib.import_module('ipyplotly.validators')
+    importlib.reload(validators_module)
+    datatypes_module = importlib.import_module('ipyplotly.datatypes')
+    importlib.reload(datatypes_module)
+
+    # Build constructor description strings
+    data_validator = validators_module.DataValidator()
+    data_description = reindent_validator_description(data_validator, 8)
+
+    layout_validator = validators_module.LayoutValidator()
+    layout_description = reindent_validator_description(layout_validator, 8)
+
+    frames_validator = validators_module.FramesValidator()
+    frames_description = reindent_validator_description(frames_validator, 8)
+
+    buffer.write(f"""
+    def __init__(self, data=None, layout=None, frames=None):
+        \"\"\"
+        Create a new {fig_classname} instance
+        
+        Parameters
+        ----------
+        data
+            {data_description}
+        layout
+            {layout_description}
+        frames
+            {frames_description}
+        \"\"\"
+        super().__init__(data, layout, frames)
+    """)
+
+    # add_trace methods
     for trace_node in trace_nodes:
 
         # Function signature
@@ -296,16 +337,16 @@ class {fig_classname}({base_classname}):\n""")
     return buffer.getvalue()
 
 
-def append_figure_class(outdir, base_node: TraceNode):
+def append_figure_class(outdir, trace_node):
 
-    if base_node.node_path:
-        raise ValueError('Expected root trace node. Received node with path "%s"' % base_node.dir_str)
+    if trace_node.node_path:
+        raise ValueError('Expected root trace node. Received node with path "%s"' % trace_node.dir_str)
 
     base_figures = [('basewidget', 'BaseFigureWidget', 'FigureWidget'),
                     ('basedatatypes', 'BaseFigure', 'Figure')]
 
     for base_package, base_classname, fig_classname in base_figures:
-        figure_source = build_figure_py(base_node, base_package, base_classname, fig_classname)
+        figure_source = build_figure_py(trace_node, base_package, base_classname, fig_classname)
         formatted_source = format_source(figure_source)
 
         # Append to file
@@ -315,3 +356,5 @@ def append_figure_class(outdir, base_node: TraceNode):
         with open(filepath, 'a') as f:
             f.write('\n\n')
             f.write(formatted_source)
+            f.flush()
+            os.fsync(f.fileno())
