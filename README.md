@@ -47,3 +47,5 @@ This project was a successful experiment to test the feasibility of creating a
 Plotly ipywidget library.  This approach has been embraced by the official
 [plotly.py](https://github.com/plotly/plotly.py) project and will be integrated into
 a new major version of plotly.py in the not-too-distant future.
+
+See [plotly/plotly.py#942](https://github.com/plotly/plotly.py/pull/942) for current status.
